@@ -19,11 +19,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import {
-  clearPesuSyncCache,
-  savePesuSyncCache,
-  syncPesuData,
-} from "@/lib/pesu/campusflow-pesu";
+import { clearPesuSyncCache } from "@/lib/pesu/campusflow-pesu";
 import { notifyPesuSyncChanged } from "@/lib/hooks/use-pesu-attendance";
 import BorderGlow from "@/components/ui/BorderGlow";
 import {
@@ -44,6 +40,12 @@ type SwapCard = {
   detail: string;
   icon: LucideIcon;
   tone: "purple" | "red" | "blue";
+};
+
+type PesuLoginResponse = {
+  connected?: boolean;
+  srn?: string;
+  message?: string;
 };
 
 const swapCards: SwapCard[] = [
@@ -116,27 +118,37 @@ export default function HomePage() {
     );
   }
 
-  async function handleLocalLogin() {
+  async function handleServerLogin() {
     if (!srn.trim() || !password.trim()) return;
 
     setLoginLoading(true);
     setLoginError("");
 
     try {
-      const safePesuData = await syncPesuData({
-        srn: srn.trim().toUpperCase(),
-        password,
+      const response = await fetch("/api/pesu/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          srn: srn.trim().toUpperCase(),
+          password,
+        }),
       });
 
-      savePesuSyncCache(safePesuData);
-      notifyPesuSyncChanged();
+      const data = (await response.json()) as PesuLoginResponse;
+
+      if (!response.ok || !data.connected) {
+        throw new Error(data.message || "Could not login with PESU Academy.");
+      }
 
       const localUser = createLocalUser({
-        srn: safePesuData.profile.srn ?? srn,
-        name: safePesuData.profile.name,
+        srn: data.srn ?? srn,
       });
 
       saveLocalUser(localUser);
+      clearPesuSyncCache();
+      notifyPesuSyncChanged();
 
       setPassword("");
 
@@ -153,7 +165,15 @@ export default function HomePage() {
     }
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    try {
+      await fetch("/api/pesu/logout", {
+        method: "POST",
+      });
+    } catch {
+      // Local cleanup still completes if the server session is already gone.
+    }
+
     clearLocalUser();
     clearPesuSyncCache();
     notifyPesuSyncChanged();
@@ -231,7 +251,7 @@ export default function HomePage() {
                         CampusFlow
                       </p>
                       <p className="text-xs font-bold text-slate-500">
-                        SRN Login
+                        Server Login
                       </p>
                     </div>
                   </div>
@@ -239,17 +259,17 @@ export default function HomePage() {
                   <div className="mt-8">
                     <div className="inline-flex items-center gap-2 rounded-full bg-[#795be6]/15 px-3 py-1.5 text-xs font-black text-[#ded7ff]">
                       <ShieldCheck size={14} />
-                      Local-only student access
+                      Server-side PESU access
                     </div>
 
                     <h2 className="mt-5 text-4xl font-black leading-[0.95] tracking-[-0.05em]">
-                      Login with
-                      <span className="block text-slate-500">SRN.</span>
+                      Connect with
+                      <span className="block text-slate-500">PESU.</span>
                     </h2>
 
                     <p className="mt-4 text-sm leading-7 text-slate-400">
-                      This is local-only. SRN is saved in your browser, but your
-                      password is never stored.
+                      Your SRN is saved locally for routing, while the PESU
+                      session stays server-side.
                     </p>
                   </div>
 
@@ -268,7 +288,7 @@ export default function HomePage() {
 
                           <div>
                             <p className="text-sm font-black text-emerald-100">
-                              Local session active
+                              Server session active
                             </p>
 
                             <p className="mt-1 text-xs leading-5 text-emerald-100/70">
@@ -291,7 +311,7 @@ export default function HomePage() {
                           onClick={handleLogout}
                           className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white/[0.045] px-4 py-3 text-sm font-black text-slate-300 transition hover:bg-white/[0.075] hover:text-white"
                         >
-                          Clear local session
+                          Clear session
                           <LogOut size={16} />
                         </button>
                       </div>
@@ -331,7 +351,7 @@ export default function HomePage() {
                           </div>
                         )}
                         <button
-                          onClick={handleLocalLogin}
+                          onClick={handleServerLogin}
                           disabled={
                             loginLoading || !srn.trim() || !password.trim()
                           }
@@ -342,7 +362,7 @@ export default function HomePage() {
                           ) : (
                             <LogIn size={18} />
                           )}
-                          Login locally
+                          Login securely
                         </button>
                       </>
                     )}
@@ -350,7 +370,7 @@ export default function HomePage() {
 
                   <div className="mt-7 grid grid-cols-3 gap-3">
                     <MiniStat label="Login" value="SRN" />
-                    <MiniStat label="Cloud" value="Off" />
+                    <MiniStat label="Session" value="Server" />
                     <MiniStat label="Pass" value="Hidden" />
                   </div>
                 </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { PesuResyncCard } from "@/components/settings/PesuResyncCard";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { motion } from "framer-motion";
@@ -7,7 +8,6 @@ import { cardMotion, sectionMotion, staggerContainer } from "@/lib/motion";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { InfoRow } from "@/components/dashboard/InfoRow";
-import { PesuResyncCard } from "@/components/settings/PesuResyncCard";
 import { useSettingsStore } from "@/lib/store/settings-store";
 import { usePesuSession } from "@/lib/hooks/use-pesu-session";
 import {
@@ -20,9 +20,11 @@ import {
 import type { LucideIcon } from "lucide-react";
 import {
     Bell,
+    Database,
     KeyRound,
     Link2,
     LockKeyhole,
+    LogOut,
     RefreshCw,
     ShieldCheck,
     SlidersHorizontal,
@@ -162,7 +164,7 @@ export default function SettingsPage() {
 
                                             <p className="mt-1 text-sm leading-6 text-slate-500">
                                                 {session.connected
-                                                    ? "Your PESUAcademy session is active on the server."
+                                                    ? "Dashboard and Attendance can now use the server-side PESU session."
                                                     : "Enter SRN and password. The password is sent only to /api/pesu/login and is not saved in browser storage."}
                                             </p>
                                         </div>
@@ -177,24 +179,34 @@ export default function SettingsPage() {
                                     </button>
                                 </div>
 
-                                {error && (
-                                    <div className="mt-5 rounded-2xl border border-red-300/20 bg-red-300/10 px-4 py-3 text-sm font-bold text-red-100">
-                                        {error}
-                                    </div>
-                                )}
-
                                 {session.connected ? (
-                                    <div className="mt-6">
-                                        <PesuResyncCard
-                                            connected={session.connected}
-                                            srn={session.srn}
-                                            connectorMode={session.connectorMode}
-                                            isLoading={isLoading}
-                                            isSubmitting={isSubmitting}
-                                            onRefresh={refreshSession}
-                                            onDisconnect={disconnect}
-                                        />
-                                    </div>
+                                    <motion.div
+                                        variants={staggerContainer(0.08)}
+                                        initial="initial"
+                                        animate="animate"
+                                        className="mt-6 space-y-4"
+                                    >
+                                        <motion.div variants={cardMotion} className="studio-card-soft p-5">
+                                            <InfoRow label="Status" value="Connected" />
+                                            <InfoRow label="SRN" value={session.srn ?? "-"} />
+                                            <InfoRow
+                                                label="Connector"
+                                                value={session.connectorMode ?? "mock"}
+                                            />
+                                            <InfoRow label="Session" value="HTTP-only cookie" />
+                                            <InfoRow label="Password stored" value="No" />
+                                        </motion.div>
+
+                                        <motion.button
+                                            variants={cardMotion}
+                                            onClick={disconnect}
+                                            disabled={isSubmitting}
+                                            className="inline-flex items-center gap-2 rounded-2xl border border-red-300/20 bg-red-300/10 px-4 py-3 text-sm font-black text-red-100 transition duration-300 hover:bg-red-300/15 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            <LogOut size={16} />
+                                            Disconnect PESUAcademy
+                                        </motion.button>
+                                    </motion.div>
                                 ) : (
                                     <form onSubmit={handleConnect} className="mt-6 space-y-4">
                                         <div className="grid gap-4 md:grid-cols-2">
@@ -234,9 +246,15 @@ export default function SettingsPage() {
                                             </div>
                                         </div>
 
+                                        {error && (
+                                            <div className="rounded-2xl border border-red-300/20 bg-red-300/10 px-4 py-3 text-sm font-bold text-red-100">
+                                                {error}
+                                            </div>
+                                        )}
+
                                         <button
                                             type="submit"
-                                            disabled={isSubmitting || !srn.trim() || !password.trim()}
+                                            disabled={isSubmitting}
                                             className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-950 transition duration-300 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
                                         >
                                             <Link2 size={16} />
@@ -244,8 +262,9 @@ export default function SettingsPage() {
                                         </button>
 
                                         <p className="text-xs leading-5 text-slate-500">
-                                            The connector can run in mock or real mode, but the
-                                            browser only talks to your server API routes.
+                                            Current connector can run in mock mode. Later, real
+                                            PESUAcademy calls stay isolated inside server connector
+                                            files.
                                         </p>
                                     </form>
                                 )}
@@ -408,13 +427,13 @@ export default function SettingsPage() {
 
                                     <div>
                                         <h3 className="text-lg font-black">
-                                            {session.connected ? session.srn : "No server session"}
+                                            {session.connected ? session.srn : "Atharva Patel"}
                                         </h3>
 
                                         <p className="mt-1 text-sm leading-6 text-slate-500">
                                             {session.connected
                                                 ? "PESUAcademy session connected."
-                                                : "Connect PESUAcademy to start a server session."}
+                                                : "PESUAcademy profile will appear after real sync."}
                                         </p>
                                     </div>
                                 </div>
@@ -444,7 +463,7 @@ export default function SettingsPage() {
                         >
                             <StudioSectionHeader
                                 eyebrow="Controls"
-                                title="Server Actions"
+                                title="Data Actions"
                                 detail="Session tools"
                             />
 
@@ -456,15 +475,14 @@ export default function SettingsPage() {
                             >
                                 <ActionButton
                                     icon={RefreshCw}
-                                    label="Refresh Server Session"
+                                    label="Refresh PESU Session"
                                     onClick={refreshSession}
-                                    disabled={isSubmitting}
                                 />
+                                <ActionButton icon={Database} label="Clear Local Cache" />
                                 <ActionButton
                                     icon={KeyRound}
-                                    label="Disconnect Server Session"
+                                    label="Reset Server Session"
                                     onClick={disconnect}
-                                    disabled={isSubmitting || !session.connected}
                                 />
                             </motion.div>
                         </motion.section>
@@ -484,8 +502,8 @@ export default function SettingsPage() {
                                     </h2>
 
                                     <p className="mt-2 text-sm leading-7 text-slate-400">
-                                        PESUAcademy is using the {session.connectorMode || "mock"} connector.
-                                        Sessions stay on the server behind HTTP-only cookies.
+                                        Login is mocked until the real PESUAcademy connector is
+                                        configured. The app structure is already ready.
                                     </p>
                                 </div>
                             </div>
@@ -621,19 +639,16 @@ function ActionButton({
     icon: Icon,
     label,
     onClick,
-    disabled = false,
 }: {
     icon: LucideIcon;
     label: string;
     onClick?: () => void;
-    disabled?: boolean;
 }) {
     return (
         <motion.button
             variants={cardMotion}
             onClick={onClick}
-            disabled={disabled}
-            className="flex w-full items-center justify-between rounded-[1.4rem] border border-white/[0.07] bg-white/[0.035] px-4 py-3 text-left text-sm font-bold text-slate-300 backdrop-blur-xl transition duration-500 ease-out hover:-translate-y-0.5 hover:bg-white/[0.055] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+            className="flex w-full items-center justify-between rounded-[1.4rem] border border-white/[0.07] bg-white/[0.035] px-4 py-3 text-left text-sm font-bold text-slate-300 backdrop-blur-xl transition duration-500 ease-out hover:-translate-y-0.5 hover:bg-white/[0.055] hover:text-white"
         >
             <span className="flex items-center gap-3">
                 <Icon size={17} className="text-slate-500" />
