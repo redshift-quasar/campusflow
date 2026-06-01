@@ -18,15 +18,15 @@ export function PesuSyncBadge() {
             ? "Connected"
             : usingDemoData
                 ? "Demo Data"
-                : "Local Cache";
+                : "Cached Data";
 
     const eyebrow = connected
-        ? "PESU Sync"
-        : failed
-            ? "Sync Issue"
-            : usingDemoData
-                ? "Local Preview"
-                : "Cached Data";
+            ? "PESU Sync"
+            : failed
+                ? "Sync Issue"
+                : usingDemoData
+                    ? "Demo Preview"
+                    : "Cached Data";
 
     const toneClass = connected
         ? "bg-emerald-300/10 text-emerald-200"
@@ -39,7 +39,7 @@ export function PesuSyncBadge() {
     return (
         <button
             onClick={syncAttendance}
-            title="Sync attendance"
+            title="Refresh server attendance"
             className="group relative overflow-hidden rounded-[1.35rem] border border-white/[0.09] bg-white/[0.045] px-4 py-3 text-left shadow-xl shadow-black/10 backdrop-blur-2xl transition duration-300 hover:-translate-y-0.5 hover:border-white/[0.16] hover:bg-white/[0.075]"
         >
             <div className="absolute -right-10 -top-10 h-24 w-24 rounded-full bg-sky-300/15 blur-2xl transition duration-300 group-hover:scale-125 group-hover:bg-[#795be6]/25" />
@@ -97,7 +97,7 @@ export function PesuSyncBadge() {
                             })
                             : usingDemoData
                                 ? "Fallback"
-                                : "Local"}
+                                : "Cached"}
                     </p>
                 </div>
             </div>

@@ -168,8 +168,8 @@ export default function AttendancePage() {
                                 </h2>
 
                                 <p className="mt-1 text-sm leading-6 text-orange-100/75">
-                                    Login from the home page with your PESU credentials to sync real
-                                    profile, courses, and attendance. Password is not stored.
+                                    Connect PESUAcademy in Settings, then refresh from the
+                                    server session. Password is not stored.
                                 </p>
                             </div>
 
@@ -178,7 +178,7 @@ export default function AttendancePage() {
                                 className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-orange-100"
                             >
                                 <RefreshCw size={16} />
-                                Check Cache
+                                Check Server
                             </button>
                         </div>
                     </motion.section>
@@ -399,7 +399,7 @@ export default function AttendancePage() {
                                 className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-[#ded7ff]"
                             >
                                 <RefreshCw size={16} />
-                                Refresh Local Cache
+                                Refresh Server Data
                             </button>
                         </motion.section>
 
@@ -415,7 +415,7 @@ export default function AttendancePage() {
 
                             <div className="mt-4 space-y-3 text-sm leading-6 text-slate-500">
                                 <p>
-                                    PESU password is used only during login sync and is not saved.
+                                    PESU password is used only during server connect and is not saved.
                                 </p>
 
                                 <p>
@@ -424,8 +424,8 @@ export default function AttendancePage() {
                                 </p>
 
                                 <p>
-                                    For fresh PESU data, logout and login again so the app can
-                                    securely call PESU Academy with your password.
+                                    For fresh PESU data, use refresh while the server session is
+                                    connected in Settings.
                                 </p>
                             </div>
                         </motion.section>

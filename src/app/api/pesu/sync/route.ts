@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import path from "node:path";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -27,6 +26,7 @@ type PesuSyncResult = {
         semester?: string;
         semesterNumber?: number;
         section?: string;
+        photoDataUrl?: string | null;
     };
     attendance?: {
         code: string;
@@ -63,11 +63,7 @@ function runCampusFlowPesuSync({
     semester?: number;
 }) {
     return new Promise<PesuSyncResult>((resolve, reject) => {
-        const scriptPath = path.join(
-            process.cwd(),
-            "scripts",
-            "campusflow_pesu.py"
-        );
+        const scriptPath = "scripts/campusflow_pesu.py";
 
         const child = spawn(getPythonPath(), [scriptPath], {
             stdio: ["pipe", "pipe", "pipe"],

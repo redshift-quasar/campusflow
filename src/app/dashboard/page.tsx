@@ -15,7 +15,6 @@ import {
     MapPinned,
     RefreshCw,
     ShieldCheck,
-    Target,
     Timer,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -149,7 +148,7 @@ export default function DashboardPage() {
                         badge={source === "pesu" ? "CampusFlow / PESU Live" : "CampusFlow / Demo Preview"}
                         title="Your academic"
                         mutedTitle="control room."
-                        description="A clean overview of your PESU attendance, daily classes, alerts, and academic shortcuts — synced locally and safely."
+                        description="A clean overview of your PESU attendance, daily classes, alerts, and academic shortcuts — refreshed through the server session."
                     >
                         <DashboardHeroCard
                             average={attendanceSummary.average}
@@ -177,13 +176,13 @@ export default function DashboardPage() {
                                 </h2>
 
                                 <p className="mt-1 text-sm leading-6 text-orange-100/75">
-                                    Login from the home page with PESU credentials once. CampusFlow
-                                    will cache only safe profile, attendance, and course data.
+                                    Connect PESUAcademy in Settings, then refresh attendance from
+                                    the server session.
                                 </p>
                             </div>
 
                             <Link
-                                href="/"
+                                href="/settings"
                                 className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-orange-100"
                             >
                                 Sync PESU
@@ -484,13 +483,13 @@ function DashboardHeroCard({
                 className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-xs font-black text-slate-950 transition hover:bg-[#ded7ff]"
             >
                 <RefreshCw size={15} />
-                Refresh Local Cache
+                Refresh Server Data
             </button>
 
             <p className="mt-3 text-xs leading-5 text-slate-500">
                 {syncedAt
                     ? `Synced ${new Date(syncedAt).toLocaleString()}`
-                    : "Login once to sync real PESU data."}
+                    : "Connect PESUAcademy in Settings to refresh real data."}
             </p>
         </div>
     );

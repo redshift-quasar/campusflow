@@ -11,6 +11,7 @@ export type SafePesuProfile = {
   semester?: string;
   semesterNumber?: number;
   section?: string;
+  photoDataUrl?: string | null;
 };
 
 export type SafePesuAttendanceSubject = {
@@ -119,7 +120,11 @@ export async function syncPesuData({
     | SafePesuSyncResponse
     | FailedPesuSyncResponse;
 
-  if (!response.ok || !data.ok) {
+  if (!response.ok) {
+    throw new Error("error" in data ? data.error || "PESU sync failed." : "PESU sync failed.");
+  }
+
+  if (data.ok === false) {
     throw new Error(data.error || "PESU sync failed.");
   }
 

@@ -356,7 +356,7 @@ export const dashboardUpdates: DashboardUpdate[] = [
     },
     {
         title: "Attendance sync ready",
-        detail: "Use sync to refresh subject-wise attendance from your local route.",
+        detail: "Use sync to refresh subject-wise attendance from the server session.",
         time: "2h",
     },
     {

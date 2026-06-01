@@ -225,17 +225,11 @@ export function StudioToneBadge({
     tone = "green",
 }: {
     children: ReactNode;
-    tone?: ProgressTone;
+    tone?: Tone;
 }) {
-    const badgeClasses = {
-        green: "bg-emerald-300/10 text-emerald-200",
-        orange: "bg-orange-300/10 text-orange-200",
-        red: "bg-red-300/10 text-red-200",
-    };
-
     return (
         <span
-            className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${badgeClasses[tone]}`}
+            className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${toneClasses[tone].badge}`}
         >
             {children}
         </span>

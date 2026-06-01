@@ -1,6 +1,7 @@
 "use client";
 
 import { usePesuProfile } from "@/lib/hooks/use-pesu-profile";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -95,7 +96,7 @@ export function DashboardShell({
 
     const displayName = profile?.name ?? user?.name ?? user?.srn ?? "Student";
     const displaySrn = profile?.srn ?? user?.srn ?? "";
-    const photoDataUrl = profile?.photoDataUrl;
+    const photoDataUrl = profile?.photoDataUrl ?? undefined;
 
     useEffect(() => {
         function handleKeyDown(event: KeyboardEvent) {
@@ -261,7 +262,7 @@ export function DashboardShell({
             <MobileNav
                 pathname={pathname}
                 logout={logout}
-                srn={displayName}
+                srn={displaySrn || displayName}
                 photoDataUrl={photoDataUrl}
             />
 
@@ -283,9 +284,11 @@ function SidebarLogo() {
     return (
         <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1 text-slate-950 shadow-lg shadow-white/10 transition group-hover:scale-105">
             {!failed ? (
-                <img
+                <Image
                     src="/campusflow-logo.png"
                     alt="CampusFlow"
+                    width={44}
+                    height={44}
                     onError={() => setFailed(true)}
                     className="h-full w-full rounded-xl object-cover"
                 />
@@ -367,7 +370,7 @@ function MobileNav({
                     <ProfileAvatar
                         name={srn}
                         photoDataUrl={photoDataUrl}
-                        size="sm"
+                        compact
                     />
 
                     <span className="truncate text-xs font-black text-slate-300">
@@ -792,11 +795,13 @@ function ProfileAvatar({
                 className={`group relative flex shrink-0 items-center justify-center overflow-hidden bg-white/[0.06] text-[#b7a8ff] ring-1 ring-white/[0.08] transition duration-300 hover:scale-105 hover:ring-white/[0.18] ${sizeClass}`}
             >
                 {photoDataUrl ? (
-                    <img
+                    <Image
                         src={photoDataUrl}
                         alt={name}
+                        fill
+                        unoptimized
+                        sizes="56px"
                         loading="eager"
-                        decoding="sync"
                         className="h-full w-full object-cover object-top brightness-[1.03] contrast-[1.06] saturate-[1.08]"
                         style={{
                             imageRendering: "auto",
@@ -832,9 +837,12 @@ function ProfileAvatar({
                             <X size={16} />
                         </button>
 
-                        <img
+                        <Image
                             src={photoDataUrl}
                             alt={name}
+                            width={720}
+                            height={960}
+                            unoptimized
                             className="max-h-[78vh] max-w-[82vw] rounded-[1.5rem] object-contain brightness-[1.03] contrast-[1.06] saturate-[1.08]"
                         />
 

@@ -6,7 +6,7 @@ import { cardMotion, sectionMotion, staggerContainer } from "@/lib/motion";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { InfoRow } from "@/components/dashboard/InfoRow";
-import { timetable, timetableDays } from "@/lib/demo-data";
+import { timetable, timetableDays, type TimetableSlot } from "@/lib/demo-data";
 import {
     StudioHero,
     StudioIconBubble,
@@ -42,6 +42,7 @@ export default function TimetablePage() {
 
     const firstClass = selectedClasses[0];
     const lastClass = selectedClasses[selectedClasses.length - 1];
+    const lastClassEndTime = lastClass ? getSlotEndTime(lastClass) : "--";
 
     return (
         <DashboardShell
@@ -121,7 +122,7 @@ export default function TimetablePage() {
                     <MetricMotionCard>
                         <MetricCard
                             label="Last Class"
-                            value={lastClass?.endTime ?? "--"}
+                            value={lastClassEndTime}
                             detail={lastClass?.subject ?? "No class"}
                             icon={Clock3}
                             tone="violet"
@@ -238,7 +239,7 @@ export default function TimetablePage() {
                                 <InfoRow label="Lectures" value={String(lectureCount)} />
                                 <InfoRow label="Labs" value={String(labCount)} />
                                 <InfoRow label="First class" value={firstClass?.time ?? "--"} />
-                                <InfoRow label="Last class" value={lastClass?.endTime ?? "--"} />
+                                <InfoRow label="Last class" value={lastClassEndTime} />
                             </div>
                         </motion.section>
 
@@ -317,26 +318,18 @@ function TimetableRow({
     item,
     isLast,
 }: {
-    item: {
-        day: string;
-        time: string;
-        endTime: string;
-        subject: string;
-        code: string;
-        faculty: string;
-        room: string;
-        type: "Lecture" | "Lab" | "Tutorial";
-    };
+    item: TimetableSlot;
     isLast: boolean;
 }) {
     const tone =
         item.type === "Lab" ? "orange" : item.type === "Tutorial" ? "violet" : "blue";
+    const endTime = getSlotEndTime(item);
 
     return (
         <motion.div variants={cardMotion} className="grid grid-cols-[86px_1fr] gap-4">
             <div className="pt-4 text-right">
-                <p className="text-sm font-black text-slate-300">{item.time}</p>
-                <p className="mt-1 text-xs text-slate-600">{item.endTime}</p>
+                <p className="text-sm font-black text-slate-300">{getSlotStartTime(item)}</p>
+                <p className="mt-1 text-xs text-slate-600">{endTime}</p>
             </div>
 
             <div className="relative">
@@ -366,7 +359,7 @@ function TimetableRow({
                             </div>
 
                             <div className="rounded-2xl border border-white/[0.07] bg-white/[0.045] px-4 py-3 text-sm font-black text-slate-300 backdrop-blur-lg">
-                                {item.time} - {item.endTime}
+                                {getSlotStartTime(item)} - {endTime}
                             </div>
                         </div>
 
@@ -379,6 +372,14 @@ function TimetableRow({
             </div>
         </motion.div>
     );
+}
+
+function getSlotEndTime(slot: TimetableSlot) {
+    return slot.endTime ?? slot.time.split(" - ")[1] ?? slot.time;
+}
+
+function getSlotStartTime(slot: TimetableSlot) {
+    return slot.time.split(" - ")[0] ?? slot.time;
 }
 
 function RoomItem({

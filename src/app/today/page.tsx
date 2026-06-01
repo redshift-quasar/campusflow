@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 
 export default function TodayPage() {
-    const [selectedDay, setSelectedDay] = useState("Thu");
+    const [selectedDay, setSelectedDay] = useState("Thursday");
 
     const currentClass = useMemo(() => {
         return (
