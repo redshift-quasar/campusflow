@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { motion } from "framer-motion";
+import Image from "next/image";
 import { cardMotion, sectionMotion, staggerContainer } from "@/lib/motion";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { MetricCard } from "@/components/dashboard/MetricCard";
@@ -426,9 +427,23 @@ export default function SettingsPage() {
 
                             <div className="studio-card-soft mt-5 p-5">
                                 <div className="flex items-center gap-4">
-                                    <div className="rounded-2xl border border-white/[0.08] bg-white/[0.05] p-3 text-slate-300 backdrop-blur-xl">
-                                        <User2 size={24} />
-                                    </div>
+                                    {profile?.photoDataUrl ? (
+                                        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-white/[0.12] bg-white/[0.05] shadow-lg shadow-black/30">
+                                            <Image
+                                                src={profile.photoDataUrl}
+                                                alt={profile?.name ?? "Student"}
+                                                fill
+                                                unoptimized
+                                                sizes="56px"
+                                                loading="eager"
+                                                className="h-full w-full object-cover object-top brightness-[1.03] contrast-[1.06] saturate-[1.08]"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.05] p-3 text-slate-300 backdrop-blur-xl">
+                                            <User2 size={24} />
+                                        </div>
+                                    )}
 
                                     <div>
                                         <h3 className="text-lg font-black">

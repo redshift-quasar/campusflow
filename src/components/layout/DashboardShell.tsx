@@ -886,8 +886,8 @@ function CommandPalette({
                                         setActiveIndex(0);
                                     }}
                                     className={`rounded-full px-3.5 py-1.5 text-xs font-black tracking-tight transition duration-200 ${active
-                                            ? "bg-white text-slate-950 shadow-md shadow-white/5"
-                                            : "border border-white/[0.05] bg-white/[0.02] text-slate-400 hover:bg-white/[0.05] hover:text-white"
+                                        ? "bg-white text-slate-950 shadow-md shadow-white/5"
+                                        : "border border-white/[0.05] bg-white/[0.02] text-slate-400 hover:bg-white/[0.05] hover:text-white"
                                         }`}
                                 >
                                     {cat.label}
