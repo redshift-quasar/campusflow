@@ -7,6 +7,7 @@ import {
     type SafePesuCourse,
     type SafePesuProfile,
     type SafePesuResults,
+    type SafePesuSeating,
     type SafePesuSyncResponse,
     type SafePesuTimetable,
 } from "@/lib/pesu/campusflow-pesu";
@@ -24,6 +25,7 @@ export type PesuSession = {
     courses: SafePesuCourse[];
     timetable?: SafePesuTimetable;
     results?: SafePesuResults;
+    seating?: SafePesuSeating;
     errors?: SafePesuSyncResponse["errors"];
     data?: SafePesuSyncResponse;
 };
@@ -63,6 +65,7 @@ function normalizeSessionResponse(data: PesuSessionApiResponse): PesuSession {
         courses: data.courses ?? safeData?.courses ?? [],
         timetable: data.timetable ?? safeData?.timetable,
         results: data.results ?? safeData?.results,
+        seating: data.seating ?? safeData?.seating ?? { items: [] },
         errors: data.errors ?? safeData?.errors,
         data: safeData,
     };
@@ -186,6 +189,7 @@ export function usePesuSession() {
         courses: session.courses,
         timetable: session.timetable,
         results: session.results,
+        seating: session.seating,
         errors: session.errors,
         isLoading,
         isSubmitting,

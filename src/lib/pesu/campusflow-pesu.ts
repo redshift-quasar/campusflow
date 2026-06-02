@@ -82,6 +82,20 @@ export type SafePesuResults = {
     courses: SafePesuResultCourse[];
 };
 
+export type SafePesuSeatingItem = {
+    assessment: string;
+    code: string;
+    date: string;
+    time: string;
+    terminal: string;
+    block: string;
+    subject?: string | null;
+};
+
+export type SafePesuSeating = {
+    items: SafePesuSeatingItem[];
+};
+
 export type SafePesuSyncResponse = {
     ok: boolean;
     source: "pesu";
@@ -91,11 +105,13 @@ export type SafePesuSyncResponse = {
     courses: SafePesuCourse[];
     timetable?: SafePesuTimetable;
     results?: SafePesuResults;
+    seating?: SafePesuSeating;
     errors?: {
         attendance?: string | null;
         courses?: string | null;
         timetable?: string | null;
         results?: string | null;
+        seating?: string | null;
     };
 };
 
@@ -115,6 +131,9 @@ function isSafeSyncResponse(value: unknown): value is SafePesuSyncResponse {
     const resultsIsValid =
         data.results === undefined ||
         (Boolean(data.results) && Array.isArray(data.results.courses));
+    const hasValidSeating =
+        data.seating === undefined ||
+        (Boolean(data.seating) && Array.isArray(data.seating.items));
 
     return (
         data.ok === true &&
@@ -123,7 +142,8 @@ function isSafeSyncResponse(value: unknown): value is SafePesuSyncResponse {
         Array.isArray(data.attendance) &&
         Array.isArray(data.courses) &&
         timetableIsValid &&
-        resultsIsValid
+        resultsIsValid &&
+        hasValidSeating
     );
 }
 
@@ -171,6 +191,7 @@ export function savePesuSyncCache(data: SafePesuSyncResponse) {
         courses: data.courses,
         timetable: data.timetable,
         results: data.results,
+        seating: data.seating,
         errors: data.errors,
     };
 

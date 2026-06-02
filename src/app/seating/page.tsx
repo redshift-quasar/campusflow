@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
     Armchair,
@@ -19,7 +19,8 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { cardMotion, sectionMotion, staggerContainer } from "@/lib/motion";
 import { useLocalAuth } from "@/lib/hooks/use-local-auth";
-import { exams, type ExamSeat } from "@/lib/demo-data";
+import { usePesuSeating } from "@/lib/hooks/use-pesu-seating";
+import type { ExamSeat } from "@/lib/demo-data";
 import { normalizeSearch } from "@/lib/academic-utils";
 import {
     StudioHero,
@@ -36,26 +37,52 @@ export default function SeatingPage() {
     const displayName = user?.name ?? user?.srn ?? "Student";
 
     const [query, setQuery] = useState("");
-    const [selectedExamId, setSelectedExamId] = useState(exams[0]?.id ?? "");
+    const [selectedExamId, setSelectedExamId] = useState("");
+
+    const {
+        seating: seatingExams,
+        source,
+        usingDemoData,
+        loading,
+        error,
+        syncedAt,
+    } = usePesuSeating();
+
+    const isPesuLive = source === "pesu";
+
+    useEffect(() => {
+        if (!seatingExams.length) {
+            setSelectedExamId("");
+            return;
+        }
+
+        const selectedStillExists = seatingExams.some(
+            (exam) => exam.id === selectedExamId
+        );
+
+        if (!selectedExamId || !selectedStillExists) {
+            setSelectedExamId(seatingExams[0].id);
+        }
+    }, [selectedExamId, seatingExams]);
 
     const filteredExams = useMemo(() => {
         const normalizedQuery = normalizeSearch(query);
 
-        if (!normalizedQuery) return exams;
+        if (!normalizedQuery) return seatingExams;
 
-        return exams.filter((exam) => {
+        return seatingExams.filter((exam) => {
             const searchable = normalizeSearch(
                 `${exam.exam} ${exam.subject} ${exam.code} ${exam.room} ${exam.block} ${exam.seat}`
             );
 
             return searchable.includes(normalizedQuery);
         });
-    }, [query]);
+    }, [query, seatingExams]);
 
     const selectedExam =
-        exams.find((exam) => exam.id === selectedExamId) ??
+        seatingExams.find((exam) => exam.id === selectedExamId) ??
         filteredExams[0] ??
-        exams[0];
+        seatingExams[0];
 
     return (
         <DashboardShell
@@ -68,7 +95,7 @@ export default function SeatingPage() {
                         badge="CampusFlow / Seating"
                         title="Find your seat,"
                         mutedTitle="without chaos."
-                        description="Your exam room, block, seat number, and upcoming paper details are organized in a clean seating workspace."
+                        description="Your exam room, block, terminal number, and upcoming paper details are organized in a clean seating workspace."
                     >
                         <SeatingHeroCard exam={selectedExam} />
                     </StudioHero>
@@ -81,9 +108,15 @@ export default function SeatingPage() {
                     className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"
                 >
                     <MetricCard
-                        label="Upcoming Exams"
-                        value={exams.length}
-                        detail="Seating records available"
+                        label={isPesuLive ? "PESU Records" : "Seating Records"}
+                        value={loading ? "--" : seatingExams.length}
+                        detail={
+                            isPesuLive
+                                ? "Live seating records synced"
+                                : usingDemoData
+                                    ? "Demo seating fallback"
+                                    : "No live seating found"
+                        }
                         icon={FileText}
                         tone="violet"
                     />
@@ -97,7 +130,7 @@ export default function SeatingPage() {
                     />
 
                     <MetricCard
-                        label="Block"
+                        label="Room / Block"
                         value={selectedExam?.block ?? "--"}
                         detail={selectedExam?.room ?? "Room not selected"}
                         icon={Building2}
@@ -105,9 +138,9 @@ export default function SeatingPage() {
                     />
 
                     <MetricCard
-                        label="Seat"
+                        label={isPesuLive ? "Terminal" : "Seat"}
                         value={selectedExam?.seat ?? "--"}
-                        detail="Assigned seat number"
+                        detail={isPesuLive ? "Assigned terminal number" : "Assigned seat number"}
                         icon={Armchair}
                         tone="orange"
                     />
@@ -122,10 +155,41 @@ export default function SeatingPage() {
                             className="studio-card p-5"
                         >
                             <div className="flex flex-wrap items-start justify-between gap-4">
-                                <StudioSectionHeader
-                                    eyebrow="Seating List"
-                                    title="Exam Seat Cards"
-                                />
+                                <div className="space-y-3">
+                                    <StudioSectionHeader
+                                        eyebrow="Seating List"
+                                        title="Exam Seat Cards"
+                                    />
+
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span
+                                            className={`rounded-full px-3 py-1 text-xs font-black ${isPesuLive
+                                                ? "bg-emerald-300/10 text-emerald-200"
+                                                : usingDemoData
+                                                    ? "bg-orange-300/10 text-orange-200"
+                                                    : "bg-red-300/10 text-red-200"
+                                                }`}
+                                        >
+                                            {isPesuLive
+                                                ? "PESU Live"
+                                                : usingDemoData
+                                                    ? "Demo Data"
+                                                    : "Seating Missing"}
+                                        </span>
+
+                                        {syncedAt ? (
+                                            <span className="rounded-full bg-white/[0.055] px-3 py-1 text-xs font-bold text-slate-500">
+                                                Synced {new Date(syncedAt).toLocaleString()}
+                                            </span>
+                                        ) : null}
+                                    </div>
+
+                                    {error ? (
+                                        <p className="text-xs font-semibold text-red-200">
+                                            {error}
+                                        </p>
+                                    ) : null}
+                                </div>
 
                                 <div className="relative w-full sm:w-80">
                                     <Search
@@ -136,7 +200,7 @@ export default function SeatingPage() {
                                     <input
                                         value={query}
                                         onChange={(event) => setQuery(event.target.value)}
-                                        placeholder="Search subject, room, seat..."
+                                        placeholder="Search subject, room, terminal..."
                                         className="w-full rounded-2xl border border-white/[0.07] bg-white/[0.045] py-3 pl-11 pr-4 text-sm font-semibold text-white outline-none backdrop-blur-xl transition placeholder:text-slate-600 focus:border-white/[0.14] focus:bg-white/[0.07]"
                                     />
                                 </div>
@@ -154,6 +218,7 @@ export default function SeatingPage() {
                                             key={exam.id}
                                             exam={exam}
                                             active={selectedExam?.id === exam.id}
+                                            isPesuLive={isPesuLive}
                                             onClick={() => setSelectedExamId(exam.id)}
                                         />
                                     ))
@@ -163,12 +228,14 @@ export default function SeatingPage() {
                                         className="rounded-[1.5rem] border border-white/[0.07] bg-white/[0.035] p-6 text-center backdrop-blur-2xl"
                                     >
                                         <p className="text-sm font-black text-slate-300">
-                                            No seating record found
+                                            {loading
+                                                ? "Loading seating records..."
+                                                : "No seating record found"}
                                         </p>
 
                                         <p className="mt-2 text-xs leading-5 text-slate-600">
-                                            Try searching by subject, subject code, room, block, or
-                                            seat number.
+                                            Try searching by subject, course code, room, block, or
+                                            terminal number.
                                         </p>
                                     </motion.div>
                                 )}
@@ -186,7 +253,7 @@ export default function SeatingPage() {
                             <div className="flex items-start justify-between gap-4">
                                 <div>
                                     <p className="text-sm font-semibold text-slate-400">
-                                        Selected Seat
+                                        {isPesuLive ? "Selected Terminal" : "Selected Seat"}
                                     </p>
 
                                     <h2 className="mt-2 text-3xl font-black tracking-[-0.05em]">
@@ -204,7 +271,10 @@ export default function SeatingPage() {
 
                             <div className="mt-6 grid grid-cols-2 gap-3">
                                 <StudioMini label="Exam" value={selectedExam?.exam ?? "--"} />
-                                <StudioMini label="Room" value={selectedExam?.room ?? "--"} />
+                                <StudioMini
+                                    label={isPesuLive ? "Terminal" : "Room"}
+                                    value={selectedExam?.seat ?? "--"}
+                                />
                                 <StudioMini label="Block" value={selectedExam?.block ?? "--"} />
                                 <StudioMini label="Time" value={selectedExam?.time ?? "--"} />
                                 <StudioMini
@@ -228,7 +298,7 @@ export default function SeatingPage() {
                             <div className="mt-4 space-y-3">
                                 <ChecklistRow
                                     icon={TicketCheck}
-                                    label="Verify seat number"
+                                    label={isPesuLive ? "Verify terminal number" : "Verify seat number"}
                                     detail={selectedExam?.seat ?? "Select exam"}
                                     tone="green"
                                 />
@@ -236,7 +306,7 @@ export default function SeatingPage() {
                                 <ChecklistRow
                                     icon={DoorOpen}
                                     label="Reach room early"
-                                    detail={selectedExam?.room ?? "Room not selected"}
+                                    detail={selectedExam?.block ?? "Room not selected"}
                                     tone="blue"
                                 />
 
@@ -268,8 +338,8 @@ export default function SeatingPage() {
                                 />
 
                                 <InfoChip
-                                    label="Room"
-                                    value={selectedExam?.room ?? "--"}
+                                    label={isPesuLive ? "Terminal" : "Room"}
+                                    value={selectedExam?.seat ?? "--"}
                                     icon={MapPin}
                                     tone="blue"
                                 />
@@ -295,7 +365,7 @@ function SeatingHeroCard({ exam }: { exam?: ExamSeat }) {
             <div className="flex items-start justify-between gap-4">
                 <div>
                     <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
-                        Seat Number
+                        Terminal / Seat
                     </p>
 
                     <div className="mt-4 flex items-end gap-3">
@@ -309,8 +379,8 @@ function SeatingHeroCard({ exam }: { exam?: ExamSeat }) {
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
-                <StudioMini label="Room" value={exam?.room ?? "--"} />
-                <StudioMini label="Block" value={exam?.block ?? "--"} />
+                <StudioMini label="Location" value={exam ? getExamLocationText(exam) : "--"} />
+                <StudioMini label="Terminal" value={exam?.seat ?? "--"} />
             </div>
 
             <p className="mt-4 text-xs leading-5 text-slate-500">
@@ -321,14 +391,30 @@ function SeatingHeroCard({ exam }: { exam?: ExamSeat }) {
         </div>
     );
 }
+function getExamLocationText(exam: ExamSeat) {
+    const block = exam.block?.trim();
+    const room = exam.room?.trim();
+
+    if (!block && !room) return "--";
+    if (!block) return room;
+    if (!room) return block;
+
+    if (block.toLowerCase() === room.toLowerCase()) {
+        return block;
+    }
+
+    return `${block} • ${room}`;
+}
 
 function ExamCard({
     exam,
     active,
+    isPesuLive,
     onClick,
 }: {
     exam: ExamSeat;
     active: boolean;
+    isPesuLive: boolean;
     onClick: () => void;
 }) {
     return (
@@ -337,8 +423,8 @@ function ExamCard({
             variants={cardMotion}
             onClick={onClick}
             className={`group relative overflow-hidden rounded-[1.5rem] border p-4 text-left shadow-xl shadow-black/10 backdrop-blur-2xl transition duration-500 hover:-translate-y-0.5 ${active
-                    ? "border-orange-300/25 bg-orange-300/[0.08]"
-                    : "border-white/[0.07] bg-white/[0.035] hover:bg-white/[0.06]"
+                ? "border-orange-300/25 bg-orange-300/[0.08]"
+                : "border-white/[0.07] bg-white/[0.035] hover:bg-white/[0.06]"
                 }`}
         >
             <div
@@ -355,8 +441,8 @@ function ExamCard({
 
                         <span
                             className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${active
-                                    ? "bg-orange-300/10 text-orange-200"
-                                    : "bg-white/[0.055] text-slate-400"
+                                ? "bg-orange-300/10 text-orange-200"
+                                : "bg-white/[0.055] text-slate-400"
                                 }`}
                         >
                             {exam.exam}
@@ -375,14 +461,14 @@ function ExamCard({
                 <div className="grid gap-2 text-right">
                     <div className="rounded-2xl bg-white/[0.055] px-4 py-3">
                         <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-600">
-                            Seat
+                            {isPesuLive ? "Terminal" : "Seat"}
                         </p>
 
                         <p className="mt-1 text-sm font-black text-white">{exam.seat}</p>
                     </div>
 
                     <p className="text-xs font-bold text-slate-600">
-                        {exam.block} • {exam.room}
+                        {getExamLocationText(exam)}
                     </p>
                 </div>
             </div>

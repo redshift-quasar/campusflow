@@ -25,7 +25,8 @@ function isSafePesuSyncResponse(value: unknown): value is SafePesuSyncResponse {
         Array.isArray(data.attendance) &&
         Array.isArray(data.courses) &&
         (data.timetable === undefined || Array.isArray(data.timetable.slots)) &&
-        (data.results === undefined || Array.isArray(data.results.courses))
+        (data.results === undefined || Array.isArray(data.results.courses)) &&
+        (data.seating === undefined || Array.isArray(data.seating.items))
     );
 }
 
@@ -39,7 +40,11 @@ function toSafePesuSyncResponse(data: SafePesuSyncResponse): SafePesuSyncRespons
         courses: data.courses,
         timetable: data.timetable,
         results: data.results,
-        errors: data.errors,
+        seating: data.seating ?? { items: [] },
+        errors: {
+            ...data.errors,
+            seating: data.errors?.seating ?? null,
+        },
     };
 }
 

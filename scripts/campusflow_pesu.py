@@ -15,10 +15,21 @@ from pesuacademy import PESUAcademy
 TIMETABLE_URL = "https://www.pesuacademy.com/Academy/s/studentProfilePESUAdmin"
 RESULTS_URL = "https://www.pesuacademy.com/Academy/a/studentProfilePESU/getEsaAndIsaResultSemBySRN"
 
+SEATING_URL = "https://www.pesuacademy.com/Academy/s/studentProfilePESUAdmin"
+
 TIMETABLE_PARAMS = {
     "menuId": "669",
     "url": "studentProfilePESUAdmin",
     "controllerMode": "6415",
+    "actionType": "5",
+    "id": "0",
+    "selectedData": "0",
+}
+
+SEATING_PARAMS = {
+    "menuId": "655",
+    "url": "studentProfilePESUAdmin",
+    "controllerMode": "6404",
     "actionType": "5",
     "id": "0",
     "selectedData": "0",
@@ -313,6 +324,47 @@ def parse_pesu_results_html(html: str):
 
     return result
 
+def default_seating():
+    return {
+        "items": [],
+    }
+
+
+def parse_pesu_seating_html(html: str):
+    soup = BeautifulSoup(html or "", "html.parser")
+    table = soup.select_one("table#seatinginfo")
+
+    if table is None:
+        return default_seating()
+
+    items = []
+
+    for row in table.select("tbody tr"):
+        cells = [clean_text(cell.get_text(" ", strip=True)) for cell in row.find_all("td")]
+
+        if len(cells) < 6:
+            continue
+
+        assessment, code, date, time_value, terminal, block = cells[:6]
+
+        if not any([assessment, code, date, time_value, terminal, block]):
+            continue
+
+        items.append(
+            {
+                "assessment": assessment,
+                "code": code,
+                "date": date,
+                "time": time_value,
+                "terminal": terminal,
+                "block": block,
+                "subject": None,
+            }
+        )
+
+    return {
+        "items": items,
+    }
 
 def normalize_wrapper_assessment(raw: Any):
     data = serialize(raw)
@@ -1127,6 +1179,21 @@ async def fetch_results_html(pesu: Any):
 
     return await response_to_text(response)
 
+async def fetch_seating_html(pesu: Any):
+    http_client = find_internal_http_client(pesu)
+
+    if http_client is None:
+        raise RuntimeError("Could not find authenticated PESU HTTP client for seating.")
+
+    response = await maybe_await(
+        http_client.get(
+            SEATING_URL,
+            params={**SEATING_PARAMS, "_": str(int(time.time() * 1000))},
+            headers=make_xhr_headers(pesu),
+        )
+    )
+
+    return await response_to_text(response)
 
 async def fetch_timetable(pesu: Any):
     html = await fetch_timetable_html(pesu)
@@ -1214,6 +1281,23 @@ async def fetch_results(pesu: Any, semester_number: int | None = None):
 
     return parsed
 
+async def fetch_seating(pesu: Any):
+    html = await fetch_seating_html(pesu)
+    parsed = parse_pesu_seating_html(html)
+
+    if os.environ.get("CAMPUSFLOW_DEBUG_PESU") == "1":
+        print(
+            json.dumps(
+                {
+                    "debugSeatingHtmlLength": len(str(html or "")),
+                    "debugHasSeatingTable": "seatinginfo" in str(html or ""),
+                    "debugSeatingItemCount": len(parsed.get("items") or []),
+                }
+            ),
+            file=sys.stderr,
+        )
+
+    return parsed
 async def main():
     pesu = None
 
@@ -1233,7 +1317,7 @@ async def main():
         attendance_result = await safe_call(lambda: pesu.get_attendance())
         courses_result = await safe_call(lambda: pesu.get_courses())
         timetable_result = await safe_call(lambda: fetch_timetable(pesu))
-        
+        seating_result = await safe_call(lambda: fetch_seating(pesu))
 
         if not profile_result["ok"]:
             raise RuntimeError(profile_result.get("error") or "Could not fetch profile.")
@@ -1249,6 +1333,7 @@ async def main():
         attendance = []
         courses = []
         results = default_results()
+        seating = default_seating()
         timetable = {
             "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
             "roomId": None,
@@ -1267,6 +1352,9 @@ async def main():
 
         if results_result["ok"]:
             results = results_result["data"]
+            
+        if seating_result["ok"]:
+            seating = seating_result["data"]
 
         print(
             json.dumps(
@@ -1279,11 +1367,13 @@ async def main():
                     "courses": courses,
                     "timetable": timetable,
                     "results": results,
+                    "seating": seating,
                     "errors": {
                         "attendance": None if attendance_result["ok"] else attendance_result.get("error"),
                         "courses": None if courses_result["ok"] else courses_result.get("error"),
                         "timetable": None if timetable_result["ok"] else timetable_result.get("error"),
                         "results": None if results_result["ok"] else results_result.get("error"),
+                        "seating": None if seating_result["ok"] else seating_result.get("error"),
                     },
                 }
             )

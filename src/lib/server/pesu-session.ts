@@ -6,6 +6,7 @@ import type {
     SafePesuCourse,
     SafePesuProfile,
     SafePesuResults,
+    SafePesuSeating,
     SafePesuSyncResponse,
     SafePesuTimetable,
 } from "@/lib/pesu/campusflow-pesu";
@@ -26,6 +27,7 @@ export type PesuSessionResponse = {
     courses: SafePesuCourse[];
     timetable?: SafePesuTimetable;
     results?: SafePesuResults;
+    seating?: SafePesuSeating;
     errors?: SafePesuSyncResponse["errors"];
     data?: SafePesuSyncResponse;
 };
@@ -112,6 +114,7 @@ export function toPesuSessionResponse(
             connectorMode: "none",
             attendance: [],
             courses: [],
+            seating: { items: [] },
         };
     }
 
@@ -126,6 +129,7 @@ export function toPesuSessionResponse(
         courses: session.data.courses,
         timetable: session.data.timetable,
         results: session.data.results,
+        seating: session.data.seating ?? { items: [] },
         errors: session.data.errors,
         data: session.data,
     };
@@ -145,6 +149,7 @@ export async function getPesuSession(): Promise<PesuSessionSnapshot> {
             connectorMode: "none",
             attendance: [],
             courses: [],
+            seating: { items: [] },
         };
     }
 
@@ -160,6 +165,7 @@ export async function getPesuSession(): Promise<PesuSessionSnapshot> {
             connectorMode: "none",
             attendance: [],
             courses: [],
+            seating: { items: [] },
         };
     }
 
@@ -175,6 +181,7 @@ export async function getPesuSession(): Promise<PesuSessionSnapshot> {
         courses: record.data.courses,
         timetable: record.data.timetable,
         results: record.data.results,
+        seating: record.data.seating ?? { items: [] },
         errors: record.data.errors,
         data: record.data,
     };
