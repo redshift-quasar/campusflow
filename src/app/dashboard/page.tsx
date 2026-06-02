@@ -23,8 +23,13 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { useLocalAuth } from "@/lib/hooks/use-local-auth";
 import { usePesuAttendance } from "@/lib/hooks/use-pesu-attendance";
+import { usePesuSession } from "@/lib/hooks/use-pesu-session";
 import { useSettingsStore } from "@/lib/store/settings-store";
-import { calendarEvents, dashboardUpdates, todayClasses } from "@/lib/demo-data";
+import {
+    calendarEvents,
+    dashboardUpdates,
+    todayClasses as demoTodayClasses,
+} from "@/lib/demo-data";
 import {
     getAttendancePercent,
     getCriticalSubject,
@@ -44,6 +49,46 @@ import {
 } from "@/components/studio/Studio";
 
 type Tone = "blue" | "green" | "orange" | "violet" | "red" | "slate";
+
+type DashboardClassStatus = "ongoing" | "upcoming" | "completed";
+
+type DashboardClass = {
+    id: string;
+    status: DashboardClassStatus;
+    subject: string;
+    code: string;
+    time: string;
+    room: string;
+    day: string;
+};
+
+type DashboardSeatingItem = {
+    assessment?: string;
+    code?: string;
+    date?: string;
+    time?: string;
+    terminal?: string;
+    block?: string;
+    subject?: string | null;
+};
+
+type DashboardTimetableSlot = {
+    id?: string;
+    day?: string;
+    code?: string;
+    subject?: string;
+    time?: string;
+    startTime?: string;
+    endTime?: string;
+    room?: string;
+};
+
+type DashboardResultCourse = {
+    code?: string;
+    name?: string;
+    grade?: string | null;
+    credits?: number | null;
+};
 
 const quickActions = [
     {
@@ -70,7 +115,7 @@ const quickActions = [
     {
         label: "Seating",
         href: "/seating",
-        detail: "Exam room and seat",
+        detail: "Exam room and terminal",
         icon: MapPinned,
         tone: "green",
     },
@@ -84,8 +129,10 @@ const quickActions = [
 
 export default function DashboardPage() {
     const { user } = useLocalAuth({ redirectIfMissing: true });
+    const { session, refreshSession } = usePesuSession();
 
-    const displayName = user?.name ?? user?.srn ?? "Student";
+    const displayName =
+        session.profile?.name ?? user?.name ?? user?.srn ?? session.srn ?? "Student";
 
     const attendanceTarget = useSettingsStore((state) => state.attendanceTarget);
 
@@ -96,6 +143,15 @@ export default function DashboardPage() {
         usingDemoData,
         syncAttendance,
     } = usePesuAttendance();
+
+    const timetableSlots = (session.timetable?.slots ?? []) as DashboardTimetableSlot[];
+    const resultCourses = (session.results?.courses ?? []) as DashboardResultCourse[];
+    const seatingItems = (session.seating?.items ?? []) as DashboardSeatingItem[];
+
+    function handleRefresh() {
+        void syncAttendance();
+        void refreshSession();
+    }
 
     const attendanceSummary = useMemo(() => {
         const average =
@@ -130,12 +186,32 @@ export default function DashboardPage() {
         };
     }, [attendanceTarget, subjects]);
 
+    const todaySchedule = useMemo(() => {
+        if (timetableSlots.length > 0) {
+            return buildTodayClassPreview(timetableSlots);
+        }
+
+        return demoTodayClasses.map(mapDemoClassToDashboardClass);
+    }, [timetableSlots]);
+
     const nextClass =
-        todayClasses.find((item) => item.status === "ongoing") ??
-        todayClasses.find((item) => item.status === "upcoming") ??
-        todayClasses[0];
+        todaySchedule.find((item) => item.status === "ongoing") ??
+        todaySchedule.find((item) => item.status === "upcoming") ??
+        todaySchedule[0];
 
     const nextEvent = calendarEvents[0];
+
+    const resultSummary = useMemo(() => {
+        return getResultSummary({
+            sgpa: session.results?.sgpa ?? null,
+            semester: session.results?.semester ?? null,
+            courses: resultCourses,
+        });
+    }, [resultCourses, session.results?.semester, session.results?.sgpa]);
+
+    const latestSeating = useMemo(() => {
+        return getLatestSeatingItem(seatingItems);
+    }, [seatingItems]);
 
     return (
         <DashboardShell
@@ -145,10 +221,14 @@ export default function DashboardPage() {
             <div className="main-shine-surface mx-auto max-w-7xl space-y-6 rounded-[2.5rem]">
                 <motion.div variants={sectionMotion} initial="initial" animate="animate">
                     <StudioHero
-                        badge={source === "pesu" ? "CampusFlow / PESU Live" : "CampusFlow / Demo Preview"}
+                        badge={
+                            source === "pesu"
+                                ? "CampusFlow / PESU Live"
+                                : "CampusFlow / Demo Preview"
+                        }
                         title="Your academic"
                         mutedTitle="control room."
-                        description="A clean overview of your PESU attendance, daily classes, alerts, and academic shortcuts — refreshed through the server session."
+                        description="A clean overview of your PESU attendance, daily classes, results, seating, and academic shortcuts — refreshed through the server session."
                     >
                         <DashboardHeroCard
                             average={attendanceSummary.average}
@@ -157,7 +237,7 @@ export default function DashboardPage() {
                             source={source}
                             syncedAt={syncedAt}
                             usingDemoData={usingDemoData}
-                            onRefresh={syncAttendance}
+                            onRefresh={handleRefresh}
                         />
                     </StudioHero>
                 </motion.div>
@@ -176,8 +256,8 @@ export default function DashboardPage() {
                                 </h2>
 
                                 <p className="mt-1 text-sm leading-6 text-orange-100/75">
-                                    Connect PESUAcademy in Settings, then refresh attendance from
-                                    the server session.
+                                    Connect PESUAcademy in Settings to sync attendance,
+                                    timetable, results, and seating from the server session.
                                 </p>
                             </div>
 
@@ -215,19 +295,27 @@ export default function DashboardPage() {
                     />
 
                     <MetricCard
-                        label="Safe Subjects"
-                        value={attendanceSummary.safeSubjects.length}
-                        detail="Currently above target"
-                        icon={ShieldCheck}
-                        tone="green"
-                    />
-
-                    <MetricCard
                         label="Next Class"
                         value={nextClass?.time?.split(" - ")[0] ?? "--"}
                         detail={nextClass?.subject ?? "No class data"}
                         icon={Clock3}
                         tone="blue"
+                    />
+
+                    <MetricCard
+                        label="Latest SGPA"
+                        value={
+                            resultSummary.sgpa !== null
+                                ? resultSummary.sgpa.toString()
+                                : "--"
+                        }
+                        detail={
+                            resultSummary.courseCount
+                                ? `Sem ${resultSummary.semester ?? "--"} • ${resultSummary.courseCount} courses`
+                                : "Results not synced"
+                        }
+                        icon={GraduationCap}
+                        tone="violet"
                     />
                 </motion.section>
 
@@ -255,7 +343,9 @@ export default function DashboardPage() {
                                 {subjects
                                     .slice()
                                     .sort(
-                                        (a, b) => getAttendancePercent(a) - getAttendancePercent(b)
+                                        (a, b) =>
+                                            getAttendancePercent(a) -
+                                            getAttendancePercent(b)
                                     )
                                     .slice(0, 6)
                                     .map((subject) => (
@@ -372,22 +462,68 @@ export default function DashboardPage() {
                                     icon={Timer}
                                     label={nextClass?.status === "ongoing" ? "Now" : "Next"}
                                     value={nextClass?.subject ?? "No class data"}
-                                    detail={nextClass ? `${nextClass.time} • ${nextClass.room}` : "--"}
+                                    detail={
+                                        nextClass
+                                            ? `${nextClass.time} • ${nextClass.room}`
+                                            : "--"
+                                    }
                                     tone="blue"
+                                />
+
+                                <SideInfoRow
+                                    icon={GraduationCap}
+                                    label="Latest Result"
+                                    value={
+                                        resultSummary.sgpa !== null
+                                            ? `${resultSummary.sgpa} SGPA`
+                                            : resultSummary.bestCourse?.grade
+                                                ? `${resultSummary.bestCourse.grade} best grade`
+                                                : "No result data"
+                                    }
+                                    detail={
+                                        resultSummary.courseCount
+                                            ? `Sem ${resultSummary.semester ?? "--"} • ${resultSummary.courseCount} courses`
+                                            : "Results will appear after PESU sync"
+                                    }
+                                    tone="violet"
+                                />
+
+                                <SideInfoRow
+                                    icon={MapPinned}
+                                    label="Seating"
+                                    value={
+                                        latestSeating
+                                            ? latestSeating.code ?? "Exam seating"
+                                            : "No seating data"
+                                    }
+                                    detail={
+                                        latestSeating
+                                            ? `${latestSeating.date ?? "--"} • ${latestSeating.time ?? "--"} • ${latestSeating.block ?? "--"}`
+                                            : "Seating will appear after release"
+                                    }
+                                    tone="green"
                                 />
 
                                 <SideInfoRow
                                     icon={CalendarDays}
                                     label="Academic Event"
                                     value={nextEvent?.title ?? "No event"}
-                                    detail={nextEvent ? `${nextEvent.date} • ${nextEvent.type}` : "--"}
-                                    tone="violet"
+                                    detail={
+                                        nextEvent
+                                            ? `${nextEvent.date} • ${nextEvent.type}`
+                                            : "--"
+                                    }
+                                    tone="orange"
                                 />
 
                                 <SideInfoRow
                                     icon={RefreshCw}
                                     label="Last Sync"
-                                    value={syncedAt ? new Date(syncedAt).toLocaleString() : "Not synced"}
+                                    value={
+                                        syncedAt
+                                            ? new Date(syncedAt).toLocaleString()
+                                            : "Not synced"
+                                    }
                                     detail={source === "pesu" ? "PESU Academy" : "Demo preview"}
                                     tone={source === "pesu" ? "green" : "orange"}
                                 />
@@ -655,6 +791,232 @@ function SideInfoRow({
             </div>
         </div>
     );
+}
+
+function mapDemoClassToDashboardClass(
+    item: (typeof demoTodayClasses)[number],
+    index: number
+): DashboardClass {
+    const status =
+        item.status === "ongoing" ||
+            item.status === "upcoming" ||
+            item.status === "completed"
+            ? item.status
+            : "upcoming";
+
+    return {
+        id: `demo-${item.subject}-${item.time}-${index}`,
+        status,
+        subject: item.subject,
+        code: "",
+        time: item.time,
+        room: item.room,
+        day: "Today",
+    };
+}
+
+function buildTodayClassPreview(slots: DashboardTimetableSlot[]) {
+    const today = new Intl.DateTimeFormat("en-US", {
+        weekday: "long",
+    }).format(new Date());
+
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    return slots
+        .filter((slot) => slot.day === today)
+        .map((slot, index) => {
+            const start = parseClockMinutes(slot.startTime ?? slot.time?.split(" - ")[0] ?? "");
+            const end = parseClockMinutes(slot.endTime ?? slot.time?.split(" - ")[1] ?? "");
+
+            const status: DashboardClassStatus =
+                start <= currentMinutes && currentMinutes <= end
+                    ? "ongoing"
+                    : currentMinutes < start
+                        ? "upcoming"
+                        : "completed";
+
+            return {
+                id: slot.id ?? `pesu-${slot.code}-${slot.time}-${index}`,
+                status,
+                subject: slot.subject ?? slot.code ?? "Class",
+                code: slot.code ?? "",
+                time: slot.time ?? [slot.startTime, slot.endTime].filter(Boolean).join(" - "),
+                room: slot.room ?? "Room not synced",
+                day: slot.day ?? today,
+            };
+        })
+        .sort((a, b) => {
+            const aStart = parseClockMinutes(a.time.split(" - ")[0] ?? "");
+            const bStart = parseClockMinutes(b.time.split(" - ")[0] ?? "");
+
+            return aStart - bStart;
+        });
+}
+
+function parseClockMinutes(value: string) {
+    const match = value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+
+    if (!match) {
+        return 0;
+    }
+
+    let hour = Number(match[1]);
+    const minute = Number(match[2]);
+    const meridiem = match[3].toUpperCase();
+
+    if (meridiem === "PM" && hour !== 12) {
+        hour += 12;
+    }
+
+    if (meridiem === "AM" && hour === 12) {
+        hour = 0;
+    }
+
+    return hour * 60 + minute;
+}
+
+function getResultSummary({
+    sgpa,
+    semester,
+    courses,
+}: {
+    sgpa: number | null;
+    semester: number | null;
+    courses: DashboardResultCourse[];
+}) {
+    const gradedCourses = courses.filter((course) => course.grade);
+
+    const sortedByGrade = gradedCourses
+        .slice()
+        .sort((a, b) => getGradeRank(b.grade) - getGradeRank(a.grade));
+
+    return {
+        sgpa,
+        semester,
+        courseCount: courses.length,
+        bestCourse: sortedByGrade[0],
+        weakestCourse: sortedByGrade[sortedByGrade.length - 1],
+    };
+}
+
+function getGradeRank(grade?: string | null) {
+    const normalized = (grade ?? "").toUpperCase().trim();
+
+    const rank: Record<string, number> = {
+        S: 10,
+        A: 9,
+        "A+": 9,
+        B: 8,
+        "B+": 8,
+        C: 7,
+        D: 6,
+        E: 5,
+        F: 0,
+    };
+
+    return rank[normalized] ?? -1;
+}
+
+function getLatestSeatingItem(items: DashboardSeatingItem[]) {
+    if (!items.length) {
+        return null;
+    }
+
+    return items
+        .slice()
+        .sort((a, b) => getSeatingTimestamp(b) - getSeatingTimestamp(a))[0];
+}
+
+function getSeatingTimestamp(item: DashboardSeatingItem) {
+    const date = parsePESUDate(item.date ?? "");
+    const time = parsePESUStartTime(item.time ?? "");
+
+    if (!date) {
+        return 0;
+    }
+
+    return new Date(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute
+    ).getTime();
+}
+
+function parsePESUDate(value: string) {
+    const match = value.trim().match(/^(\d{1,2})[-\s]([A-Za-z]+)[-\s](\d{4})$/);
+
+    if (!match) {
+        return null;
+    }
+
+    const monthMap: Record<string, number> = {
+        jan: 0,
+        january: 0,
+        feb: 1,
+        february: 1,
+        mar: 2,
+        march: 2,
+        apr: 3,
+        april: 3,
+        may: 4,
+        jun: 5,
+        june: 5,
+        jul: 6,
+        july: 6,
+        aug: 7,
+        august: 7,
+        sep: 8,
+        sept: 8,
+        september: 8,
+        oct: 9,
+        october: 9,
+        nov: 10,
+        november: 10,
+        dec: 11,
+        december: 11,
+    };
+
+    const day = Number(match[1]);
+    const month = monthMap[match[2].toLowerCase()];
+    const year = Number(match[3]);
+
+    if (Number.isNaN(day) || month === undefined || Number.isNaN(year)) {
+        return null;
+    }
+
+    return { day, month, year };
+}
+
+function parsePESUStartTime(value: string) {
+    const start = value.split(" - ")[0]?.trim() ?? "";
+    const match = start.match(/^(\d{1,2})[-:](\d{2})\s*(AM|PM)$/i);
+
+    if (!match) {
+        return {
+            hour: 0,
+            minute: 0,
+        };
+    }
+
+    let hour = Number(match[1]);
+    const minute = Number(match[2]);
+    const meridiem = match[3].toUpperCase();
+
+    if (meridiem === "PM" && hour !== 12) {
+        hour += 12;
+    }
+
+    if (meridiem === "AM" && hour === 12) {
+        hour = 0;
+    }
+
+    return {
+        hour,
+        minute,
+    };
 }
 
 function toProgressTone(tone: Tone): ProgressTone {

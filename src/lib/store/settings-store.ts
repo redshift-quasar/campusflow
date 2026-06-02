@@ -33,7 +33,7 @@ const DEFAULT_SETTINGS = {
 function clampAttendanceTarget(target: number) {
     if (Number.isNaN(target)) return DEFAULT_SETTINGS.attendanceTarget;
 
-    return Math.min(100, Math.max(1, Math.round(target)));
+    return Math.min(100, Math.max(50, Math.round(target)));
 }
 
 export const useSettingsStore = create<SettingsState>()(

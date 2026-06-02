@@ -32,7 +32,7 @@ import {
     User2,
 } from "lucide-react";
 
-const targetOptions = [65, 75, 85, 90];
+const targetOptions = [75, 85, 95];
 
 export default function SettingsPage() {
     const target = useSettingsStore((state) => state.attendanceTarget);
@@ -54,7 +54,15 @@ export default function SettingsPage() {
         disconnect,
         refreshSession,
     } = usePesuSession();
+
     const profile = session.profile;
+
+    const attendanceCount = session.attendance?.length ?? 0;
+    const courseCount = session.courses?.length ?? 0;
+    const timetableCount = session.timetable?.slots?.length ?? 0;
+    const resultCount = session.results?.courses?.length ?? 0;
+    const seatingCount = session.seating?.items?.length ?? 0;
+
     const dataSources = [
         {
             label: "Profile",
@@ -63,29 +71,28 @@ export default function SettingsPage() {
         },
         {
             label: "Attendance",
-            status: session.attendance.length ? "Live" : session.connected ? "Missing" : "Demo",
-            detail: session.attendance.length
-                ? `${session.attendance.length} subjects`
-                : "Demo fallback",
+            status: attendanceCount ? "Live" : session.connected ? "Missing" : "Demo",
+            detail: attendanceCount ? `${attendanceCount} subjects` : "Demo fallback",
         },
         {
             label: "Courses",
-            status: session.courses.length ? "Live" : session.connected ? "Missing" : "Demo",
-            detail: session.courses.length ? `${session.courses.length} courses` : "No courses",
+            status: courseCount ? "Live" : session.connected ? "Missing" : "Demo",
+            detail: courseCount ? `${courseCount} courses` : "No courses",
         },
         {
             label: "Timetable",
-            status: session.timetable?.slots.length ? "Live" : session.connected ? "Missing" : "Demo",
-            detail: session.timetable?.slots.length
-                ? `${session.timetable.slots.length} slots`
-                : "Demo fallback",
+            status: timetableCount ? "Live" : session.connected ? "Missing" : "Demo",
+            detail: timetableCount ? `${timetableCount} slots` : "Demo fallback",
         },
         {
             label: "Results",
-            status: session.results?.courses.length ? "Live" : session.connected ? "Missing" : "Demo",
-            detail: session.results?.courses.length
-                ? `${session.results.courses.length} courses`
-                : "Awaiting PESU result",
+            status: resultCount ? "Live" : session.connected ? "Missing" : "Demo",
+            detail: resultCount ? `${resultCount} courses` : "Awaiting PESU result",
+        },
+        {
+            label: "Seating",
+            status: seatingCount ? "Live" : session.connected ? "Missing" : "Demo",
+            detail: seatingCount ? `${seatingCount} records` : "Awaiting seating release",
         },
     ];
 
@@ -149,10 +156,10 @@ export default function SettingsPage() {
 
                     <MetricMotionCard>
                         <MetricCard
-                            label="Interface"
-                            value="Fixed"
-                            detail="Constant studio UI"
-                            icon={SlidersHorizontal}
+                            label="Live Modules"
+                            value={`${dataSources.filter((source) => source.status === "Live").length}/6`}
+                            detail="Profile, attendance, timetable, results, seating"
+                            icon={Database}
                             tone="violet"
                         />
                     </MetricMotionCard>
@@ -182,24 +189,24 @@ export default function SettingsPage() {
                                 detail="Server-side session"
                             />
 
-                            <div className="mt-5 rounded-[1.5rem] border border-white/[0.07] bg-white/[0.035] p-5 backdrop-blur-xl">
-                                <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                                    <div className="flex gap-4">
+                            <div className="mt-6 rounded-[1.5rem] border border-white/[0.07] bg-white/[0.035] p-6 backdrop-blur-xl sm:p-8">
+                                <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                                    <div className="flex gap-5">
                                         <StudioIconBubble
                                             icon={session.connected ? ShieldCheck : LockKeyhole}
                                             tone={session.connected ? "green" : "orange"}
                                         />
 
                                         <div>
-                                            <h3 className="font-black tracking-tight">
+                                            <h3 className="text-lg font-black tracking-tight">
                                                 {session.connected
                                                     ? "PESUAcademy connected"
                                                     : "Connect PESUAcademy"}
                                             </h3>
 
-                                            <p className="mt-1 text-sm leading-6 text-slate-500">
+                                            <p className="mt-2 text-sm leading-6 text-slate-500">
                                                 {session.connected
-                                                    ? "Dashboard and Attendance can now use the server-side PESU session."
+                                                    ? "CampusFlow can now use live profile, attendance, timetable, results, and seating data from the server-side PESU session."
                                                     : "Enter SRN and password. The password is used only during connect/sync and is not saved in browser storage."}
                                             </p>
                                         </div>
@@ -219,14 +226,22 @@ export default function SettingsPage() {
                                         variants={staggerContainer(0.08)}
                                         initial="initial"
                                         animate="animate"
-                                        className="mt-6 space-y-4"
+                                        className="mt-8 space-y-5"
                                     >
-                                        <motion.div variants={cardMotion} className="studio-card-soft p-5">
+                                        <motion.div variants={cardMotion} className="studio-card-soft p-5 sm:p-6 space-y-1">
                                             <InfoRow label="Status" value="Connected" />
                                             <InfoRow label="SRN" value={session.srn ?? "-"} />
                                             <InfoRow
                                                 label="Connector"
                                                 value={session.connectorMode ?? "none"}
+                                            />
+                                            <InfoRow
+                                                label="Last sync"
+                                                value={
+                                                    session.syncedAt
+                                                        ? new Date(session.syncedAt).toLocaleString()
+                                                        : "Not synced"
+                                                }
                                             />
                                             <InfoRow label="Session" value="HTTP-only cookie" />
                                             <InfoRow label="Password stored" value="No" />
@@ -236,15 +251,15 @@ export default function SettingsPage() {
                                             variants={cardMotion}
                                             onClick={disconnect}
                                             disabled={isSubmitting}
-                                            className="inline-flex items-center gap-2 rounded-2xl border border-red-300/20 bg-red-300/10 px-4 py-3 text-sm font-black text-red-100 transition duration-300 hover:bg-red-300/15 disabled:cursor-not-allowed disabled:opacity-50"
+                                            className="inline-flex items-center gap-2 rounded-2xl border border-red-300/20 bg-red-300/10 px-5 py-3.5 text-sm font-black text-red-100 transition duration-300 hover:bg-red-300/15 disabled:cursor-not-allowed disabled:opacity-50"
                                         >
                                             <LogOut size={16} />
                                             Disconnect PESUAcademy
                                         </motion.button>
                                     </motion.div>
                                 ) : (
-                                    <form onSubmit={handleConnect} className="mt-6 space-y-4">
-                                        <div className="grid gap-4 md:grid-cols-2">
+                                    <form onSubmit={handleConnect} className="mt-8 space-y-6">
+                                        <div className="grid gap-6 md:grid-cols-2">
                                             <div>
                                                 <label
                                                     htmlFor="pesuSrn"
@@ -282,7 +297,7 @@ export default function SettingsPage() {
                                         </div>
 
                                         {error && (
-                                            <div className="rounded-2xl border border-red-300/20 bg-red-300/10 px-4 py-3 text-sm font-bold text-red-100">
+                                            <div className="rounded-2xl border border-red-300/20 bg-red-300/10 px-5 py-4 text-sm font-bold text-red-100">
                                                 {error}
                                             </div>
                                         )}
@@ -290,16 +305,16 @@ export default function SettingsPage() {
                                         <button
                                             type="submit"
                                             disabled={isSubmitting}
-                                            className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-950 transition duration-300 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                            className="inline-flex items-center gap-2 rounded-2xl bg-white px-6 py-3.5 text-sm font-black text-slate-950 transition duration-300 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
                                         >
                                             <Link2 size={16} />
                                             {isSubmitting ? "Connecting..." : "Connect PESUAcademy"}
                                         </button>
 
-                                        <p className="text-xs leading-5 text-slate-500">
+                                        <p className="text-xs leading-6 text-slate-500">
                                             The password is used for this connect request only.
-                                            CampusFlow stores the safe normalized sync result in the
-                                            server session.
+                                            CampusFlow stores only the safe normalized sync result in
+                                            the server session.
                                         </p>
                                     </form>
                                 )}
@@ -378,8 +393,8 @@ export default function SettingsPage() {
                                     </h2>
 
                                     <p className="mt-2 text-sm leading-6 text-slate-500">
-                                        Browser calls only your own API routes. PESU session lives
-                                        in HTTP-only cookies.
+                                        Browser calls only your own API routes. PESU credentials are
+                                        not stored in localStorage.
                                     </p>
                                 </div>
 
@@ -417,7 +432,7 @@ export default function SettingsPage() {
 
                                     <div>
                                         <h3 className="text-lg font-black">
-                                            {profile?.name ?? session.srn ?? "Atharva Patel"}
+                                            {profile?.name ?? session.srn ?? "Student"}
                                         </h3>
 
                                         <p className="mt-1 text-sm leading-6 text-slate-500">
@@ -425,10 +440,13 @@ export default function SettingsPage() {
                                                 ? [
                                                     profile?.srn,
                                                     profile?.semester,
-                                                    profile?.section ? `Sec ${profile.section}` : "",
+                                                    profile?.section
+                                                        ? `Sec ${profile.section}`
+                                                        : "",
                                                 ]
                                                     .filter(Boolean)
-                                                    .join(" • ") || "PESUAcademy session connected."
+                                                    .join(" • ") ||
+                                                "PESUAcademy session connected."
                                                 : "PESUAcademy profile will appear after real sync."}
                                         </p>
                                     </div>
@@ -591,7 +609,7 @@ function SettingsHeroCard({
             <p className="mt-3 text-sm leading-6 text-slate-400">
                 {connected
                     ? `Connected as ${srn}`
-                    : "Connect your PESUAcademy account to sync real attendance later."}
+                    : "Connect your PESUAcademy account to sync live academic data."}
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
@@ -622,6 +640,8 @@ function AttendanceTargetControl({
     value: number;
     onChange: (value: number) => void;
 }) {
+    const sliderProgress = Math.max(0, value - 50) * 2;
+
     return (
         <div className="relative overflow-hidden rounded-[1.6rem] border border-white/[0.07] bg-white/[0.035] p-5 backdrop-blur-xl">
             <div className="absolute -right-14 -top-14 h-36 w-36 rounded-full bg-sky-300/10 blur-3xl" />
@@ -640,9 +660,9 @@ function AttendanceTargetControl({
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 text-center text-[10px] font-black uppercase tracking-[0.12em] text-slate-600">
-                        <span>Relaxed 65%</span>
-                        <span>Safe 75%</span>
-                        <span>Strict 85%</span>
+                        <span>Relaxed 75%</span>
+                        <span>Safe 85%</span>
+                        <span>Strict 95%</span>
                     </div>
                 </div>
 
@@ -656,15 +676,11 @@ function AttendanceTargetControl({
                     onChange={(event) => onChange(Number(event.target.value))}
                     className="mt-6 h-2 w-full cursor-pointer appearance-none rounded-full bg-white/[0.1] accent-sky-200"
                     style={{
-                        background: `linear-gradient(90deg, #bae6fd ${Math.max(
-                            0,
-                            value - 50
-                        ) * 2}%, rgba(255,255,255,0.1) ${Math.max(0, value - 50) * 2
-                            }%)`,
+                        background: `linear-gradient(90deg, #bae6fd ${sliderProgress}%, rgba(255,255,255,0.1) ${sliderProgress}%)`,
                     }}
                 />
 
-                <div className="mt-4 grid grid-cols-4 gap-2">
+                <div className="mt-4 grid grid-cols-3 gap-2">
                     {targetOptions.map((option) => (
                         <button
                             key={option}
