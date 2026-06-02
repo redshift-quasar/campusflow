@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
     Armchair,
@@ -49,21 +49,6 @@ export default function SeatingPage() {
     } = usePesuSeating();
 
     const isPesuLive = source === "pesu";
-
-    useEffect(() => {
-        if (!seatingExams.length) {
-            setSelectedExamId("");
-            return;
-        }
-
-        const selectedStillExists = seatingExams.some(
-            (exam) => exam.id === selectedExamId
-        );
-
-        if (!selectedExamId || !selectedStillExists) {
-            setSelectedExamId(seatingExams[0].id);
-        }
-    }, [selectedExamId, seatingExams]);
 
     const filteredExams = useMemo(() => {
         const normalizedQuery = normalizeSearch(query);

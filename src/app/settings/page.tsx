@@ -8,6 +8,7 @@ import { cardMotion, sectionMotion, staggerContainer } from "@/lib/motion";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { InfoRow } from "@/components/dashboard/InfoRow";
+import { PesuSyncBadge } from "@/components/layout/PesuSyncBadge";
 import { useSettingsStore } from "@/lib/store/settings-store";
 import { usePesuSession } from "@/lib/hooks/use-pesu-session";
 import { clearPesuSyncCache } from "@/lib/pesu/campusflow-pesu";
@@ -213,13 +214,17 @@ export default function SettingsPage() {
                                         </div>
                                     </div>
 
-                                    <button
-                                        onClick={refreshSession}
-                                        disabled={isSubmitting}
-                                        className="studio-button w-fit disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                        Refresh Status
-                                    </button>
+                                    <div className="flex shrink-0 flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
+                                        <PesuSyncBadge />
+
+                                        <button
+                                            onClick={refreshSession}
+                                            disabled={isSubmitting}
+                                            className="studio-button w-fit disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            Refresh Status
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {session.connected ? (

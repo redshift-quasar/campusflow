@@ -650,7 +650,7 @@ function LoginLogo() {
   const [failed, setFailed] = useState(false);
 
   return (
-    <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1 text-slate-950 shadow-lg shadow-white/10">
+    <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-[#b7a8ff]">
       {!failed ? (
         <Image
           src="/campusflow-logo.png"
@@ -659,7 +659,7 @@ function LoginLogo() {
           height={44}
           priority
           onError={() => setFailed(true)}
-          className="h-full w-full rounded-xl object-cover"
+          className="h-full w-full object-cover"
         />
       ) : (
         <Sparkles size={24} />

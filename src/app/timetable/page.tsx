@@ -226,7 +226,7 @@ export default function TimetablePage() {
                                 {selectedClasses.length > 0 ? (
                                     selectedClasses.map((item, index) => (
                                         <TimetableRow
-                                            key={`${item.day}-${item.time}-${item.code}`}
+                                            key={getTimetableSlotKey(item, index, "row")}
                                             item={item}
                                             isLast={index === selectedClasses.length - 1}
                                         />
@@ -344,8 +344,11 @@ export default function TimetablePage() {
                                 animate="animate"
                                 className="mt-5 space-y-3"
                             >
-                                {selectedClasses.map((item) => (
-                                    <RoomItem key={`${item.code}-${item.room}`} item={item} />
+                                {selectedClasses.map((item, index) => (
+                                    <RoomItem
+                                        key={getTimetableSlotKey(item, index, "room")}
+                                        item={item}
+                                    />
                                 ))}
                             </motion.div>
                         </motion.section>
@@ -362,6 +365,14 @@ function MetricMotionCard({ children }: { children: React.ReactNode }) {
             {children}
         </motion.div>
     );
+}
+
+function getTimetableSlotKey(
+    item: AppTimetableSlot,
+    index: number,
+    scope: "row" | "room"
+) {
+    return `${scope}-${item.id || `${item.day}-${item.time}-${item.code}`}-${index}`;
 }
 
 function TimetableRow({
