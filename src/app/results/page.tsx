@@ -17,7 +17,8 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { cardMotion, sectionMotion, staggerContainer } from "@/lib/motion";
 import { useLocalAuth } from "@/lib/hooks/use-local-auth";
-import { results, semesters } from "@/lib/demo-data";
+import { usePesuResults } from "@/lib/hooks/use-pesu-results";
+import type { SafePesuResultCourse } from "@/lib/pesu/campusflow-pesu";
 import {
     getAverageResult,
     getGradeDistribution,
@@ -40,13 +41,22 @@ type Tone = "blue" | "green" | "orange" | "violet" | "red";
 
 export default function ResultsPage() {
     const { user } = useLocalAuth();
+    const {
+        results: resultItems,
+        courses: resultCourses,
+        semesters,
+        rawResults,
+        source,
+        error,
+        usingDemoData,
+    } = usePesuResults();
 
     const displayName = user?.name ?? user?.srn ?? "Student";
 
-    const averageResult = getAverageResult(results);
-    const highestResult = getHighestResult(results);
-    const lowestResult = getLowestResult(results);
-    const gradeDistribution = getGradeDistribution(results);
+    const averageResult = getAverageResult(resultItems);
+    const highestResult = getHighestResult(resultItems);
+    const lowestResult = getLowestResult(resultItems);
+    const gradeDistribution = getGradeDistribution(resultItems);
     const latestSemester = semesters.at(-1);
 
     return (
@@ -54,7 +64,7 @@ export default function ResultsPage() {
             <div className="main-shine-surface mx-auto max-w-7xl space-y-6 rounded-[2.5rem]">
                 <motion.div variants={sectionMotion} initial="initial" animate="animate">
                     <StudioHero
-                        badge="CampusFlow / Results"
+                        badge={source === "pesu" ? "CampusFlow / PESU Live" : "CampusFlow / Demo Results"}
                         title="Performance,"
                         mutedTitle="cleanly tracked."
                         description="Your marks, grade distribution, semester record, and strongest subjects are arranged in one premium academic overview."
@@ -63,9 +73,30 @@ export default function ResultsPage() {
                             average={averageResult}
                             sgpa={latestSemester?.sgpa ?? 0}
                             cgpa={latestSemester?.cgpa ?? 0}
+                            earnedCredits={rawResults?.earnedCredits ?? latestSemester?.credits}
+                            totalCredits={rawResults?.totalCredits}
                         />
                     </StudioHero>
                 </motion.div>
+
+                {usingDemoData && (
+                    <motion.section
+                        variants={sectionMotion}
+                        initial="initial"
+                        animate="animate"
+                        className="rounded-[2rem] border border-orange-300/20 bg-orange-300/[0.08] p-5 shadow-2xl shadow-black/20 backdrop-blur-2xl"
+                    >
+                        <h2 className="text-lg font-black text-orange-100">
+                            Demo results are showing
+                        </h2>
+
+                        <p className="mt-1 text-sm leading-6 text-orange-100/75">
+                            {error
+                                ? `PESU results are not available yet: ${error}`
+                                : "PESU results are not available yet, so CampusFlow is keeping the demo fallback visible."}
+                        </p>
+                    </motion.section>
+                )}
 
                 <motion.section
                     variants={staggerContainer(0.08)}
@@ -125,9 +156,19 @@ export default function ResultsPage() {
                                 animate="animate"
                                 className="mt-5 grid gap-3"
                             >
-                                {results.map((result) => (
-                                    <ResultSubjectCard key={result.code} result={result} />
-                                ))}
+                                {resultItems.map((result) => {
+                                    const course = resultCourses.find(
+                                        (item) => item.code === result.code
+                                    );
+
+                                    return (
+                                        <ResultSubjectCard
+                                            key={result.code}
+                                            result={result}
+                                            course={course}
+                                        />
+                                    );
+                                })}
                             </motion.div>
                         </motion.section>
 
@@ -196,7 +237,7 @@ export default function ResultsPage() {
                                 <StudioMini label="Average" value={`${averageResult}%`} />
                                 <StudioMini
                                     label="Subjects"
-                                    value={String(results.length)}
+                                    value={String(resultItems.length)}
                                 />
                                 <StudioMini
                                     label="CGPA"
@@ -222,7 +263,7 @@ export default function ResultsPage() {
                                         key={grade}
                                         grade={grade}
                                         count={count}
-                                        total={results.length}
+                                        total={resultItems.length}
                                     />
                                 ))}
                             </div>
@@ -257,8 +298,10 @@ export default function ResultsPage() {
                                     icon={Award}
                                     label="Credits"
                                     value={
-                                        latestSemester
-                                            ? `${latestSemester.credits} completed`
+                                        rawResults?.earnedCredits || rawResults?.totalCredits
+                                            ? `${rawResults.earnedCredits ?? "--"}/${rawResults.totalCredits ?? "--"}`
+                                            : latestSemester
+                                                ? `${latestSemester.credits} completed`
                                             : "--"
                                     }
                                     tone="violet"
@@ -276,10 +319,14 @@ function ResultHeroCard({
     average,
     sgpa,
     cgpa,
+    earnedCredits,
+    totalCredits,
 }: {
     average: number;
     sgpa: number;
     cgpa: number;
+    earnedCredits?: number | null;
+    totalCredits?: number | null;
 }) {
     const status = getResultStatus(average);
     const tone = getResultTone(status);
@@ -307,6 +354,15 @@ function ResultHeroCard({
             <div className="mt-5 grid grid-cols-2 gap-3">
                 <StudioMini label="SGPA" value={sgpa ? sgpa.toFixed(2) : "--"} />
                 <StudioMini label="CGPA" value={cgpa ? cgpa.toFixed(2) : "--"} />
+                <StudioMini
+                    label="Credits"
+                    value={
+                        earnedCredits || totalCredits
+                            ? `${earnedCredits ?? "--"}/${totalCredits ?? "--"}`
+                            : "--"
+                    }
+                    wide
+                />
             </div>
 
             <div className="mt-5">
@@ -320,7 +376,13 @@ function ResultHeroCard({
     );
 }
 
-function ResultSubjectCard({ result }: { result: ResultItem }) {
+function ResultSubjectCard({
+    result,
+    course,
+}: {
+    result: ResultItem;
+    course?: SafePesuResultCourse;
+}) {
     const status = getResultStatus(result.total);
     const tone = getResultTone(status);
     const toneClasses = getToneClasses(tone);
@@ -370,6 +432,26 @@ function ResultSubjectCard({ result }: { result: ResultItem }) {
                     </div>
                 </div>
             </div>
+
+            {course?.assessments.length ? (
+                <div className="relative z-10 mt-4 grid gap-2 md:grid-cols-2">
+                    {course.assessments.map((assessment) => (
+                        <div
+                            key={`${result.code}-${assessment.name}`}
+                            className="rounded-2xl border border-white/[0.06] bg-white/[0.035] px-3 py-2"
+                        >
+                            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">
+                                {assessment.name}
+                            </p>
+
+                            <p className="mt-1 text-sm font-black text-slate-300">
+                                {assessment.marks ?? "--"}
+                                {assessment.maxMarks ? `/${assessment.maxMarks}` : ""}
+                            </p>
+                        </div>
+                    ))}
+                </div>
+            ) : null}
         </motion.div>
     );
 }

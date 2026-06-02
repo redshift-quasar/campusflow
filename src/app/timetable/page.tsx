@@ -6,7 +6,10 @@ import { cardMotion, sectionMotion, staggerContainer } from "@/lib/motion";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { InfoRow } from "@/components/dashboard/InfoRow";
-import { timetable, timetableDays, type TimetableSlot } from "@/lib/demo-data";
+import {
+    usePesuTimetable,
+    type AppTimetableSlot,
+} from "@/lib/hooks/use-pesu-timetable";
 import {
     StudioHero,
     StudioIconBubble,
@@ -27,12 +30,35 @@ import {
     User2,
 } from "lucide-react";
 
+function getTodayName() {
+    return new Date().toLocaleDateString("en-US", {
+        weekday: "long",
+    });
+}
+
 export default function TimetablePage() {
-    const [selectedDay, setSelectedDay] = useState("Thursday");
+    const {
+        slotsByDay,
+        days,
+        roomId,
+        lastFinalizedAt,
+        source,
+        usingDemoData,
+    } = usePesuTimetable();
+    const todayName = getTodayName();
+    const [selectedDay, setSelectedDay] = useState(todayName);
+    const selectedScheduleDay = days.includes(selectedDay)
+        ? selectedDay
+        : days.includes(todayName)
+            ? todayName
+            : days[0] ?? "Monday";
 
     const selectedClasses = useMemo(() => {
-        return timetable.filter((item) => item.day === selectedDay);
-    }, [selectedDay]);
+        return (
+            slotsByDay.find((group) => group.day === selectedScheduleDay)?.slots ??
+            []
+        );
+    }, [selectedScheduleDay, slotsByDay]);
 
     const totalClasses = selectedClasses.length;
     const labCount = selectedClasses.filter((item) => item.type === "Lab").length;
@@ -52,7 +78,7 @@ export default function TimetablePage() {
             <div className="main-shine-surface mx-auto max-w-7xl space-y-6 rounded-[2.5rem]">
                 <motion.div variants={sectionMotion} initial="initial" animate="animate">
                     <StudioHero
-                        badge="Weekly Timetable"
+                        badge={source === "pesu" ? "Weekly Timetable / PESU Live" : "Weekly Timetable / Demo"}
                         title="Your week,"
                         mutedTitle="mapped clearly."
                         description="Switch between weekdays, check rooms and faculty, and understand your daily academic load in a clean timeline."
@@ -63,7 +89,7 @@ export default function TimetablePage() {
                             </p>
 
                             <h3 className="mt-4 text-4xl font-black tracking-tight">
-                                {selectedDay}
+                                {selectedScheduleDay}
                             </h3>
 
                             <p className="mt-2 text-sm leading-6 text-slate-400">
@@ -75,7 +101,16 @@ export default function TimetablePage() {
                                 <StudioMini label="Labs" value={String(labCount)} />
                                 <StudioMini
                                     label="First Class"
-                                    value={firstClass?.time ?? "--"}
+                                    value={firstClass?.startTime ?? "--"}
+                                    wide
+                                />
+                                <StudioMini
+                                    label={source === "pesu" ? "PESU Live" : "Source"}
+                                    value={
+                                        source === "pesu"
+                                            ? formatOptionalDate(lastFinalizedAt) || "Live"
+                                            : "Demo"
+                                    }
                                     wide
                                 />
                             </div>
@@ -91,9 +126,9 @@ export default function TimetablePage() {
                 >
                     <MetricMotionCard>
                         <MetricCard
-                            label="Classes Today"
+                            label="Classes"
                             value={String(totalClasses)}
-                            detail={`${selectedDay} schedule`}
+                            detail={`${selectedScheduleDay} schedule`}
                             icon={CalendarDays}
                             tone="primary"
                         />
@@ -123,7 +158,11 @@ export default function TimetablePage() {
                         <MetricCard
                             label="Last Class"
                             value={lastClassEndTime}
-                            detail={lastClass?.subject ?? "No class"}
+                            detail={
+                                source === "pesu" && lastFinalizedAt
+                                    ? `Finalized ${formatOptionalDate(lastFinalizedAt)}`
+                                    : lastClass?.subject ?? "No class"
+                            }
                             icon={Clock3}
                             tone="violet"
                         />
@@ -146,8 +185,8 @@ export default function TimetablePage() {
                                 />
 
                                 <div className="flex gap-2 overflow-x-auto pb-1">
-                                    {timetableDays.map((day) => {
-                                        const active = selectedDay === day;
+                                    {days.map((day) => {
+                                        const active = selectedScheduleDay === day;
 
                                         return (
                                             <button
@@ -174,7 +213,7 @@ export default function TimetablePage() {
                         >
                             <StudioSectionHeader
                                 eyebrow="Schedule"
-                                title={`${selectedDay}'s Classes`}
+                                title={`${selectedScheduleDay}'s Classes`}
                                 detail={`${totalClasses} sessions`}
                             />
 
@@ -201,7 +240,7 @@ export default function TimetablePage() {
                                             No classes scheduled
                                         </p>
                                         <p className="mt-2 text-sm text-slate-500">
-                                            This day is currently free in demo timetable data.
+                                            This day is currently free in {usingDemoData ? "demo" : "PESU"} timetable data.
                                         </p>
                                     </motion.div>
                                 )}
@@ -223,7 +262,7 @@ export default function TimetablePage() {
                                     </p>
 
                                     <h2 className="mt-2 text-2xl font-black tracking-tight">
-                                        {selectedDay}
+                                        {selectedScheduleDay}
                                     </h2>
 
                                     <p className="mt-2 text-sm leading-6 text-slate-500">
@@ -238,8 +277,19 @@ export default function TimetablePage() {
                                 <InfoRow label="Total classes" value={String(totalClasses)} />
                                 <InfoRow label="Lectures" value={String(lectureCount)} />
                                 <InfoRow label="Labs" value={String(labCount)} />
-                                <InfoRow label="First class" value={firstClass?.time ?? "--"} />
+                                <InfoRow label="First class" value={firstClass?.startTime ?? "--"} />
                                 <InfoRow label="Last class" value={lastClassEndTime} />
+                                <InfoRow
+                                    label="Source"
+                                    value={source === "pesu" ? "PESU Live" : "Demo fallback"}
+                                />
+                                {source === "pesu" && lastFinalizedAt && (
+                                    <InfoRow
+                                        label="Finalized"
+                                        value={formatOptionalDate(lastFinalizedAt)}
+                                    />
+                                )}
+                                {roomId && <InfoRow label="Room ID" value={roomId} />}
                             </div>
                         </motion.section>
 
@@ -261,7 +311,7 @@ export default function TimetablePage() {
                                         </h2>
 
                                         <p className="mt-2 text-sm leading-6 text-slate-500">
-                                            Start your day at {firstClass.time}.
+                                            Start your day at {firstClass.startTime}.
                                         </p>
                                     </div>
 
@@ -284,7 +334,7 @@ export default function TimetablePage() {
                         >
                             <StudioSectionHeader
                                 eyebrow="Room Map"
-                                title="Rooms Today"
+                                title="Rooms Selected"
                                 detail="Quick lookup"
                             />
 
@@ -318,7 +368,7 @@ function TimetableRow({
     item,
     isLast,
 }: {
-    item: TimetableSlot;
+    item: AppTimetableSlot;
     isLast: boolean;
 }) {
     const tone =
@@ -374,23 +424,18 @@ function TimetableRow({
     );
 }
 
-function getSlotEndTime(slot: TimetableSlot) {
-    return slot.endTime ?? slot.time.split(" - ")[1] ?? slot.time;
+function getSlotEndTime(slot: AppTimetableSlot) {
+    return slot.endTime || slot.time.split(" - ")[1] || slot.time;
 }
 
-function getSlotStartTime(slot: TimetableSlot) {
-    return slot.time.split(" - ")[0] ?? slot.time;
+function getSlotStartTime(slot: AppTimetableSlot) {
+    return slot.startTime || slot.time.split(" - ")[0] || slot.time;
 }
 
 function RoomItem({
     item,
 }: {
-    item: {
-        subject: string;
-        code: string;
-        room: string;
-        time: string;
-    };
+    item: AppTimetableSlot;
 }) {
     return (
         <motion.div
@@ -407,6 +452,16 @@ function RoomItem({
             <MapPin size={17} className="text-slate-500" />
         </motion.div>
     );
+}
+
+function formatOptionalDate(value: string) {
+    if (!value) return "";
+
+    const parsed = new Date(value);
+
+    if (Number.isNaN(parsed.getTime())) return value;
+
+    return parsed.toLocaleString();
 }
 
 function InfoLine({

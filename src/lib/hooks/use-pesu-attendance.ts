@@ -1,9 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import {
+    useCallback,
+    useEffect,
+    useMemo,
+    useState,
+    useSyncExternalStore,
+} from "react";
 import { attendanceSubjects } from "@/lib/demo-data";
 import type { AttendanceSubject } from "@/lib/academic-utils";
 import { useSettingsStore } from "@/lib/store/settings-store";
+import { usePesuSession } from "@/lib/hooks/use-pesu-session";
 import {
     clearPesuSyncCache,
     getPesuSyncCache,
@@ -99,6 +106,10 @@ export function usePesuAttendance() {
         getSnapshot,
         getServerSnapshot
     );
+    const {
+        attendance: sessionAttendance,
+        syncedAt: sessionSyncedAt,
+    } = usePesuSession();
     const autoSync = useSettingsStore((state) => state.autoSync);
     const [serverState, setServerState] = useState<PesuAttendanceSnapshot | null>(
         null
@@ -171,7 +182,19 @@ export function usePesuAttendance() {
         void refreshFromServer();
     }, [refreshFromServer]);
 
-    const state = serverState ?? localState;
+    const sessionState = useMemo<PesuAttendanceSnapshot | null>(() => {
+        if (!sessionAttendance.length) return null;
+
+        return {
+            subjects: mapPesuAttendanceToSubjects(sessionAttendance),
+            loadState: "ready",
+            syncedAt: sessionSyncedAt,
+            source: "pesu",
+            error: "",
+        };
+    }, [sessionAttendance, sessionSyncedAt]);
+
+    const state = sessionState ?? serverState ?? localState;
 
     return {
         subjects: state.subjects,

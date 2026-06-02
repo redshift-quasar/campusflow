@@ -10,7 +10,10 @@ import {
     PremiumJoinItem,
     PremiumJoinSurface,
 } from "@/components/ui/PremiumJoin";
-import { todayClasses, weekDays } from "@/lib/demo-data";
+import {
+    usePesuTimetable,
+    type AppTimetableSlot,
+} from "@/lib/hooks/use-pesu-timetable";
 import {
     StudioHero,
     StudioIconBubble,
@@ -29,33 +32,82 @@ import {
     User2,
 } from "lucide-react";
 
+type SlotStatus = "completed" | "ongoing" | "upcoming";
+type TodayDisplaySlot = AppTimetableSlot & {
+    status: SlotStatus;
+    duration: string;
+};
+
+function getTodayName() {
+    return new Date().toLocaleDateString("en-US", {
+        weekday: "long",
+    });
+}
+
 export default function TodayPage() {
-    const [selectedDay, setSelectedDay] = useState("Thursday");
+    const { todaySlots, slotsByDay, days, lastFinalizedAt, source, usingDemoData } =
+        usePesuTimetable();
+    const todayName = getTodayName();
+    const [selectedDay, setSelectedDay] = useState(todayName);
+    const selectedScheduleDay =
+        selectedDay === todayName || days.includes(selectedDay)
+            ? selectedDay
+            : days.includes(todayName)
+                ? todayName
+                : days[0] ?? todayName;
+
+    const selectedRawSlots = useMemo(() => {
+        if (selectedScheduleDay === todayName) return todaySlots;
+
+        return (
+            slotsByDay.find((group) => group.day === selectedScheduleDay)?.slots ??
+            []
+        );
+    }, [selectedScheduleDay, slotsByDay, todayName, todaySlots]);
+
+    const selectedClasses = useMemo(() => {
+        return selectedRawSlots.map((slot) =>
+            toTodayDisplaySlot(slot, selectedScheduleDay === todayName)
+        );
+    }, [selectedScheduleDay, selectedRawSlots, todayName]);
 
     const currentClass = useMemo(() => {
         return (
-            todayClasses.find((item) => item.status === "ongoing") ?? todayClasses[0]
+            selectedClasses.find((item) => item.status === "ongoing") ??
+            selectedClasses.find((item) => item.status === "upcoming") ??
+            selectedClasses[0] ??
+            null
         );
-    }, []);
+    }, [selectedClasses]);
 
-    const completed = todayClasses.filter(
+    const completed = selectedClasses.filter(
         (item) => item.status === "completed"
     ).length;
 
-    const ongoing = todayClasses.filter(
+    const ongoing = selectedClasses.filter(
         (item) => item.status === "ongoing"
     ).length;
 
-    const upcoming = todayClasses.filter(
+    const upcoming = selectedClasses.filter(
         (item) => item.status === "upcoming"
     ).length;
+    const firstClass = selectedClasses[0] ?? null;
+    const lastClass = selectedClasses[selectedClasses.length - 1] ?? null;
+    const labCount = selectedClasses.filter((item) => item.type === "Lab").length;
+    const academicLoad = getAcademicLoad(selectedClasses);
+    const selectedDayLabel =
+        selectedScheduleDay === todayName ? "Today" : selectedScheduleDay;
+    const nextDay = getNextDay(days, selectedScheduleDay);
+    const nextDayFirstClass =
+        slotsByDay.find((group) => group.day === nextDay)?.slots[0] ?? null;
+    const sourceLabel = source === "pesu" ? "PESU Live" : "Demo fallback";
 
     return (
         <DashboardShell title="Today" subtitle="Your live academic schedule">
             <PremiumJoinSurface className="main-shine-surface mx-auto max-w-7xl space-y-6 rounded-[2.5rem]">
                 <PremiumJoinItem>
                     <StudioHero
-                        badge="Live Schedule"
+                        badge={source === "pesu" ? "Live Schedule / PESU Live" : "Live Schedule / Demo"}
                         title="Today's academic flow,"
                         mutedTitle="organized clearly."
                         description="Track your current class, upcoming sessions, room details, and day overview in one smooth timeline."
@@ -66,18 +118,31 @@ export default function TodayPage() {
                             </p>
 
                             <h3 className="mt-4 text-3xl font-black tracking-tight">
-                                {currentClass.subject}
+                                {currentClass?.subject ?? "No class scheduled"}
                             </h3>
 
                             <p className="mt-2 text-sm leading-6 text-slate-400">
-                                {currentClass.room} • {currentClass.time} •{" "}
-                                {currentClass.duration}
+                                {currentClass
+                                    ? `${currentClass.room} • ${currentClass.time} • ${currentClass.duration}`
+                                    : `${selectedDayLabel} has no timetable slots.`}
                             </p>
 
                             <div className="mt-5 grid grid-cols-2 gap-3">
-                                <StudioMini label="Code" value={currentClass.code} />
-                                <StudioMini label="Type" value={currentClass.type} />
-                                <StudioMini label="Faculty" value={currentClass.faculty} wide />
+                                <StudioMini label="Code" value={currentClass?.code ?? "--"} />
+                                <StudioMini label="Type" value={currentClass?.type ?? "--"} />
+                                <StudioMini
+                                    label={source === "pesu" ? "PESU Live" : "Source"}
+                                    value={
+                                        source === "pesu"
+                                            ? formatOptionalDate(lastFinalizedAt) || "Live"
+                                            : "Demo"
+                                    }
+                                />
+                                <StudioMini
+                                    label="Faculty"
+                                    value={currentClass?.faculty ?? "--"}
+                                    wide
+                                />
                             </div>
                         </div>
                     </StudioHero>
@@ -127,26 +192,28 @@ export default function TodayPage() {
                                 <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                                     <StudioSectionHeader
                                         eyebrow="Week Selector"
-                                        title="Thursday, 14 May"
-                                        detail={`${todayClasses.length} classes scheduled`}
+                                        title={selectedDayLabel}
+                                        detail={`${selectedClasses.length} classes scheduled`}
                                     />
 
                                     <div className="flex gap-2 overflow-x-auto pb-1">
-                                        {weekDays.map((day) => {
-                                            const active = selectedDay === day.label;
+                                        {days.map((day, index) => {
+                                            const active = selectedScheduleDay === day;
 
                                             return (
                                                 <button
-                                                    key={day.label}
-                                                    onClick={() => setSelectedDay(day.label)}
+                                                    key={day}
+                                                    onClick={() => setSelectedDay(day)}
                                                     className={`min-w-16 rounded-2xl border px-4 py-3 text-center transition duration-300 ${active
                                                             ? "border-white bg-white text-slate-950"
                                                             : "border-white/[0.08] bg-white/[0.04] text-slate-400 hover:bg-white/[0.08] hover:text-white"
                                                         }`}
                                                 >
-                                                    <p className="text-xs font-bold">{day.label}</p>
+                                                    <p className="text-xs font-bold">{day.slice(0, 3)}</p>
                                                     <p className="mt-1 text-lg font-black">
-                                                        {day.date}
+                                                        {day === todayName
+                                                            ? "Today"
+                                                            : String(index + 1).padStart(2, "0")}
                                                     </p>
                                                 </button>
                                             );
@@ -160,8 +227,8 @@ export default function TodayPage() {
                             <section className="studio-card p-5">
                                 <StudioSectionHeader
                                     eyebrow="Timeline"
-                                    title="Today's Classes"
-                                    detail="Live view"
+                                    title={`${selectedDayLabel}'s Classes`}
+                                    detail={sourceLabel}
                                 />
 
                                 <motion.div
@@ -170,13 +237,28 @@ export default function TodayPage() {
                                     animate="animate"
                                     className="mt-6 space-y-4"
                                 >
-                                    {todayClasses.map((item, index) => (
-                                        <TimelineClass
-                                            key={`${item.time}-${item.code}`}
-                                            item={item}
-                                            isLast={index === todayClasses.length - 1}
-                                        />
-                                    ))}
+                                    {selectedClasses.length > 0 ? (
+                                        selectedClasses.map((item, index) => (
+                                            <TimelineClass
+                                                key={`${item.day}-${item.time}-${item.code}-${index}`}
+                                                item={item}
+                                                isLast={index === selectedClasses.length - 1}
+                                            />
+                                        ))
+                                    ) : (
+                                        <motion.div
+                                            variants={cardMotion}
+                                            className="rounded-[1.5rem] border border-white/[0.07] bg-white/[0.035] p-8 text-center backdrop-blur-xl"
+                                        >
+                                            <p className="font-black text-slate-300">
+                                                No classes scheduled
+                                            </p>
+                                            <p className="mt-2 text-sm text-slate-500">
+                                                This day is currently free in{" "}
+                                                {usingDemoData ? "demo" : "PESU"} timetable data.
+                                            </p>
+                                        </motion.div>
+                                    )}
                                 </motion.div>
                             </section>
                         </PremiumJoinItem>
@@ -203,21 +285,35 @@ export default function TodayPage() {
 
                                 <div className="studio-card-soft mt-6 p-5">
                                     <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-600">
-                                        {currentClass.code}
+                                        {currentClass?.code ?? "NO SLOT"}
                                     </p>
 
                                     <h3 className="mt-2 text-2xl font-black tracking-tight">
-                                        {currentClass.subject}
+                                        {currentClass?.subject ?? "No class scheduled"}
                                     </h3>
 
                                     <div className="mt-5">
                                         <InfoRow
                                             label="Time"
-                                            value={`${currentClass.time} • ${currentClass.duration}`}
+                                            value={
+                                                currentClass
+                                                    ? `${currentClass.time} • ${currentClass.duration}`
+                                                    : "--"
+                                            }
                                         />
-                                        <InfoRow label="Room" value={currentClass.room} />
-                                        <InfoRow label="Faculty" value={currentClass.faculty} />
-                                        <InfoRow label="Type" value={currentClass.type} />
+                                        <InfoRow label="Room" value={currentClass?.room ?? "--"} />
+                                        <InfoRow
+                                            label="Faculty"
+                                            value={currentClass?.faculty ?? "--"}
+                                        />
+                                        <InfoRow label="Type" value={currentClass?.type ?? "--"} />
+                                        <InfoRow label="Source" value={sourceLabel} />
+                                        {source === "pesu" && lastFinalizedAt && (
+                                            <InfoRow
+                                                label="Finalized"
+                                                value={formatOptionalDate(lastFinalizedAt)}
+                                            />
+                                        )}
                                     </div>
                                 </div>
                             </section>
@@ -237,10 +333,23 @@ export default function TodayPage() {
                                     animate="animate"
                                     className="mt-5 space-y-3"
                                 >
-                                    <OverviewItem label="Academic load" value="4h 30m" />
-                                    <OverviewItem label="First class" value="09:00 AM" />
-                                    <OverviewItem label="Last class" value="04:00 PM" />
-                                    <OverviewItem label="Labs today" value="1" />
+                                    <OverviewItem label="Academic load" value={academicLoad} />
+                                    <OverviewItem
+                                        label="First class"
+                                        value={firstClass?.startTime ?? "--"}
+                                    />
+                                    <OverviewItem
+                                        label="Last class"
+                                        value={lastClass?.endTime ?? "--"}
+                                    />
+                                    <OverviewItem label="Labs today" value={String(labCount)} />
+                                    <OverviewItem label="Source" value={sourceLabel} />
+                                    {source === "pesu" && lastFinalizedAt && (
+                                        <OverviewItem
+                                            label="Finalized"
+                                            value={formatOptionalDate(lastFinalizedAt)}
+                                        />
+                                    )}
                                 </motion.div>
                             </section>
                         </PremiumJoinItem>
@@ -252,13 +361,13 @@ export default function TodayPage() {
 
                                     <div>
                                         <h2 className="text-lg font-black tracking-tight">
-                                            Tomorrow
+                                            Next Scheduled Day
                                         </h2>
 
                                         <p className="mt-2 text-sm leading-7 text-slate-400">
-                                            Your first class tomorrow starts at 08:45 AM. Live
-                                            timetable sync will be connected after PESU API
-                                            integration.
+                                            {nextDayFirstClass
+                                                ? `${nextDay}'s first class starts at ${nextDayFirstClass.startTime}: ${nextDayFirstClass.subject}.`
+                                                : `No upcoming timetable slots found in ${sourceLabel}.`}
                                         </p>
                                     </div>
                                 </div>
@@ -279,20 +388,111 @@ function MetricMotionCard({ children }: { children: ReactNode }) {
     );
 }
 
+function toTodayDisplaySlot(
+    slot: AppTimetableSlot,
+    compareWithCurrentTime: boolean
+): TodayDisplaySlot {
+    return {
+        ...slot,
+        status: compareWithCurrentTime ? getSlotStatus(slot) : "upcoming",
+        duration: getSlotDuration(slot),
+    };
+}
+
+function getSlotStatus(slot: AppTimetableSlot): SlotStatus {
+    const start = parseTimeToMinutes(slot.startTime);
+    const end = parseTimeToMinutes(slot.endTime) ?? (start === null ? null : start + 60);
+
+    if (start === null || end === null) return "upcoming";
+
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    if (currentMinutes < start) return "upcoming";
+    if (currentMinutes <= end) return "ongoing";
+
+    return "completed";
+}
+
+function getSlotDuration(slot: AppTimetableSlot) {
+    const start = parseTimeToMinutes(slot.startTime);
+    const end = parseTimeToMinutes(slot.endTime);
+
+    if (start === null || end === null || end <= start) return slot.time;
+
+    return formatDuration(end - start);
+}
+
+function getAcademicLoad(slots: TodayDisplaySlot[]) {
+    const minutes = slots.reduce((total, slot) => {
+        const start = parseTimeToMinutes(slot.startTime);
+        const end = parseTimeToMinutes(slot.endTime);
+
+        if (start === null || end === null || end <= start) return total;
+
+        return total + end - start;
+    }, 0);
+
+    if (minutes <= 0) return slots.length ? `${slots.length} sessions` : "No classes";
+
+    return formatDuration(minutes);
+}
+
+function formatDuration(minutes: number) {
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+
+    if (!hours) return `${remainingMinutes}m`;
+    if (!remainingMinutes) return `${hours}h`;
+
+    return `${hours}h ${remainingMinutes}m`;
+}
+
+function parseTimeToMinutes(value: string) {
+    const clean = value.trim().replace(/\./g, "").toUpperCase();
+    const match = clean.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/);
+
+    if (!match) return null;
+
+    let hour = Number(match[1]);
+    const minute = Number(match[2] ?? "0");
+    const meridiem = match[3];
+
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+
+    if (meridiem === "PM" && hour < 12) hour += 12;
+    if (meridiem === "AM" && hour === 12) hour = 0;
+
+    if (hour > 23 || minute > 59) return null;
+
+    return hour * 60 + minute;
+}
+
+function getNextDay(days: string[], selectedDay: string) {
+    if (!days.length) return "";
+
+    const index = days.indexOf(selectedDay);
+
+    if (index < 0) return days[0];
+
+    return days[(index + 1) % days.length];
+}
+
+function formatOptionalDate(value: string) {
+    if (!value) return "";
+
+    const parsed = new Date(value);
+
+    if (Number.isNaN(parsed.getTime())) return value;
+
+    return parsed.toLocaleString();
+}
+
 function TimelineClass({
     item,
     isLast,
 }: {
-    item: {
-        time: string;
-        duration: string;
-        subject: string;
-        code: string;
-        faculty: string;
-        room: string;
-        status: string;
-        type: "Lecture" | "Lab" | "Tutorial";
-    };
+    item: TodayDisplaySlot;
     isLast: boolean;
 }) {
     const active = item.status === "ongoing";

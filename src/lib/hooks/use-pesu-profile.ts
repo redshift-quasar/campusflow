@@ -1,12 +1,13 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import {
     getPesuSyncCache,
     PESU_SYNC_CACHE_KEY,
     type SafePesuCourse,
     type SafePesuProfile,
 } from "@/lib/pesu/campusflow-pesu";
+import { usePesuSession } from "@/lib/hooks/use-pesu-session";
 
 type PesuProfileSnapshot = {
     profile: SafePesuProfile | null;
@@ -70,11 +71,24 @@ function getServerSnapshot(): PesuProfileSnapshot {
 }
 
 export function usePesuProfile() {
-    const state = useSyncExternalStore(
+    const { profile, courses, syncedAt, source } = usePesuSession();
+    const localState = useSyncExternalStore(
         subscribe,
         getSnapshot,
         getServerSnapshot
     );
+    const state = useMemo(() => {
+        if (profile) {
+            return {
+                profile,
+                courses,
+                syncedAt,
+                source: source === "pesu" ? "pesu" : "none",
+            } satisfies PesuProfileSnapshot;
+        }
+
+        return localState;
+    }, [courses, localState, profile, source, syncedAt]);
 
     return {
         profile: state.profile,

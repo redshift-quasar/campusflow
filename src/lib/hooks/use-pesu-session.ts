@@ -1,20 +1,75 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import {
+    clearPesuSyncCache,
+    type SafePesuAttendanceSubject,
+    type SafePesuCourse,
+    type SafePesuProfile,
+    type SafePesuResults,
+    type SafePesuSyncResponse,
+    type SafePesuTimetable,
+} from "@/lib/pesu/campusflow-pesu";
 
-type PesuSession = {
+const PESU_SESSION_EVENT = "campusflow_pesu_session_changed";
+
+export type PesuSession = {
     connected: boolean;
     srn: string | null;
-    connectorMode: string;
+    connectorMode: "pesu" | "none" | string;
+    source?: "pesu";
+    syncedAt: string;
+    profile: SafePesuProfile | null;
+    attendance: SafePesuAttendanceSubject[];
+    courses: SafePesuCourse[];
+    timetable?: SafePesuTimetable;
+    results?: SafePesuResults;
+    errors?: SafePesuSyncResponse["errors"];
+    data?: SafePesuSyncResponse;
 };
 
-export function usePesuSession() {
-    const [session, setSession] = useState<PesuSession>({
-        connected: false,
-        srn: null,
-        connectorMode: "mock",
-    });
+type PesuSessionApiResponse = Partial<PesuSession> & {
+    message?: string;
+    data?: SafePesuSyncResponse;
+};
 
+const EMPTY_SESSION: PesuSession = {
+    connected: false,
+    srn: null,
+    connectorMode: "none",
+    syncedAt: "",
+    profile: null,
+    attendance: [],
+    courses: [],
+};
+
+function notifyPesuSessionChanged() {
+    if (typeof window === "undefined") return;
+
+    window.dispatchEvent(new Event(PESU_SESSION_EVENT));
+}
+
+function normalizeSessionResponse(data: PesuSessionApiResponse): PesuSession {
+    const safeData = data.data;
+
+    return {
+        connected: Boolean(data.connected),
+        srn: data.srn ?? safeData?.profile.srn ?? null,
+        connectorMode: data.connected ? data.connectorMode ?? "pesu" : "none",
+        source: data.source ?? safeData?.source,
+        syncedAt: data.syncedAt ?? safeData?.syncedAt ?? "",
+        profile: data.profile ?? safeData?.profile ?? null,
+        attendance: data.attendance ?? safeData?.attendance ?? [],
+        courses: data.courses ?? safeData?.courses ?? [],
+        timetable: data.timetable ?? safeData?.timetable,
+        results: data.results ?? safeData?.results,
+        errors: data.errors ?? safeData?.errors,
+        data: safeData,
+    };
+}
+
+export function usePesuSession() {
+    const [session, setSession] = useState<PesuSession>(EMPTY_SESSION);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState("");
@@ -27,20 +82,16 @@ export function usePesuSession() {
                 cache: "no-store",
             });
 
+            const data = (await response.json()) as PesuSessionApiResponse;
+
             if (!response.ok) {
-                throw new Error("Could not load PESU session");
+                throw new Error(data.message || "Could not load PESU session");
             }
 
-            const data = (await response.json()) as PesuSession;
-
-            setSession({
-                connected: data.connected,
-                srn: data.srn,
-                connectorMode: data.connectorMode ?? "mock",
-            });
-
+            setSession(normalizeSessionResponse(data));
             setError("");
         } catch {
+            setSession(EMPTY_SESSION);
             setError("Could not check PESUAcademy connection.");
         } finally {
             setIsLoading(false);
@@ -63,19 +114,21 @@ export function usePesuSession() {
                 }),
             });
 
-            if (!response.ok) {
-                throw new Error("Login failed");
+            const data = (await response.json()) as PesuSessionApiResponse;
+
+            if (!response.ok || !data.connected) {
+                throw new Error(data.message || "Login failed");
             }
 
-            const data = (await response.json()) as PesuSession;
-
-            setSession({
-                connected: data.connected,
-                srn: data.srn,
-                connectorMode: data.connectorMode ?? "mock",
-            });
-        } catch {
-            setError("Could not connect PESUAcademy. Check SRN/password.");
+            setSession(normalizeSessionResponse(data));
+            clearPesuSyncCache();
+            notifyPesuSessionChanged();
+        } catch (connectError) {
+            setError(
+                connectError instanceof Error
+                    ? connectError.message
+                    : "Could not connect PESUAcademy. Check SRN/password."
+            );
         } finally {
             setIsSubmitting(false);
         }
@@ -94,11 +147,9 @@ export function usePesuSession() {
                 throw new Error("Logout failed");
             }
 
-            setSession({
-                connected: false,
-                srn: null,
-                connectorMode: "mock",
-            });
+            setSession(EMPTY_SESSION);
+            clearPesuSyncCache();
+            notifyPesuSessionChanged();
         } catch {
             setError("Could not disconnect PESUAcademy.");
         } finally {
@@ -107,15 +158,35 @@ export function usePesuSession() {
     }
 
     useEffect(() => {
-        const timeout = setTimeout(() => {
+        const timeout = window.setTimeout(() => {
             void refreshSession();
         }, 0);
 
-        return () => clearTimeout(timeout);
+        function handleSessionChanged() {
+            void refreshSession();
+        }
+
+        window.addEventListener(PESU_SESSION_EVENT, handleSessionChanged);
+
+        return () => {
+            window.clearTimeout(timeout);
+            window.removeEventListener(PESU_SESSION_EVENT, handleSessionChanged);
+        };
     }, [refreshSession]);
 
     return {
         session,
+        connected: session.connected,
+        srn: session.srn,
+        connectorMode: session.connectorMode,
+        source: session.source,
+        syncedAt: session.syncedAt,
+        profile: session.profile,
+        attendance: session.attendance,
+        courses: session.courses,
+        timetable: session.timetable,
+        results: session.results,
+        errors: session.errors,
         isLoading,
         isSubmitting,
         error,

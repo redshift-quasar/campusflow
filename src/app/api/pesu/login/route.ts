@@ -1,57 +1,76 @@
 import { NextResponse } from "next/server";
-import { loginToPesuAcademy } from "@/lib/server/pesu-client";
+import { runCampusFlowPesuSync } from "@/lib/server/pesu-safe-sync";
 import {
-    PESU_SESSION_COOKIE,
-    PESU_SRN_COOKIE,
+    createPesuSession,
+    setPesuSessionCookies,
+    toPesuSessionResponse,
 } from "@/lib/server/pesu-session";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+type PesuLoginRequest = {
+    srn?: string;
+    username?: string;
+    password?: string;
+    semester?: number;
+};
 
 export async function POST(request: Request) {
     try {
-        const body = (await request.json()) as {
-            srn?: string;
-            password?: string;
-        };
+        const body = (await request.json()) as PesuLoginRequest;
 
-        const srn = body.srn ?? "";
+        const username = body.username ?? body.srn ?? "";
         const password = body.password ?? "";
 
-        const session = await loginToPesuAcademy({
-            srn,
+        if (!username || !password) {
+            return NextResponse.json(
+                {
+                    connected: false,
+                    message: "SRN/username and password are required.",
+                },
+                {
+                    status: 400,
+                }
+            );
+        }
+
+        const safeSync = await runCampusFlowPesuSync({
+            username,
             password,
+            semester: body.semester,
         });
 
-        const response = NextResponse.json({
-            connected: true,
-            srn: session.srn,
-            connectorMode: process.env.PESU_CONNECTOR_MODE ?? "mock",
-        });
+        const record = createPesuSession(safeSync);
+        const response = NextResponse.json(
+            toPesuSessionResponse({
+                connected: true,
+                sessionId: record.sessionId,
+                srn: record.srn,
+                connectorMode: "pesu",
+                source: safeSync.source,
+                syncedAt: safeSync.syncedAt,
+                profile: safeSync.profile,
+                attendance: safeSync.attendance,
+                courses: safeSync.courses,
+                timetable: safeSync.timetable,
+                results: safeSync.results,
+                errors: safeSync.errors,
+                data: safeSync,
+            })
+        );
 
-        response.cookies.set({
-            name: PESU_SESSION_COOKIE,
-            value: session.sessionToken,
-            httpOnly: true,
-            sameSite: "lax",
-            secure: process.env.NODE_ENV === "production",
-            path: "/",
-            maxAge: 60 * 60 * 8,
-        });
-
-        response.cookies.set({
-            name: PESU_SRN_COOKIE,
-            value: session.srn,
-            httpOnly: false,
-            sameSite: "lax",
-            secure: process.env.NODE_ENV === "production",
-            path: "/",
-            maxAge: 60 * 60 * 8,
-        });
+        setPesuSessionCookies(response, record);
 
         return response;
-    } catch {
+    } catch (error) {
         return NextResponse.json(
             {
                 connected: false,
-                message: "Could not connect PESUAcademy account.",
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Could not connect PESUAcademy account.",
             },
             {
                 status: 401,

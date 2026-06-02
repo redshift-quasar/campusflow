@@ -1,6 +1,7 @@
 import type { AttendanceSubject } from "@/lib/academic-utils";
 
 export const PESU_SYNC_CACHE_KEY = "campusflow_safe_pesu_sync";
+const PESU_SYNC_EVENT = "campusflow_pesu_sync_changed";
 
 export type SafePesuProfile = {
     name?: string;
@@ -11,7 +12,7 @@ export type SafePesuProfile = {
     semester?: string;
     semesterNumber?: number;
     section?: string;
-    photoDataUrl?: string;
+    photoDataUrl?: string | null;
 };
 
 export type SafePesuAttendanceSubject = {
@@ -31,6 +32,56 @@ export type SafePesuCourse = {
     id?: string | null;
 };
 
+export type SafePesuTimetableSlot = {
+    id: string;
+    day: string;
+    dayIndex: number;
+    slotOrder: number;
+    time: string;
+    startTime: string;
+    endTime: string;
+    code: string;
+    subject: string;
+    faculty: string;
+    faculties: string[];
+    type: "Lecture" | "Lab" | "Tutorial";
+    room: string;
+    roomId?: string | null;
+    templateDetailsId?: string | null;
+};
+
+export type SafePesuTimetable = {
+    slots: SafePesuTimetableSlot[];
+    days?: string[];
+    roomId?: string | null;
+    lastFinalizedAt?: string | null;
+};
+
+export type SafePesuResultAssessment = {
+    name: string;
+    marks?: number | null;
+    maxMarks?: number | null;
+};
+
+export type SafePesuResultCourse = {
+    code: string;
+    name: string;
+    credits?: number | null;
+    maxCredits?: number | null;
+    grade?: string | null;
+    assessments: SafePesuResultAssessment[];
+};
+
+export type SafePesuResults = {
+    semester?: number | null;
+    description?: string;
+    earnedCredits?: number | null;
+    totalCredits?: number | null;
+    sgpa?: number | null;
+    cgpa?: number | null;
+    courses: SafePesuResultCourse[];
+};
+
 export type SafePesuSyncResponse = {
     ok: boolean;
     source: "pesu";
@@ -38,9 +89,13 @@ export type SafePesuSyncResponse = {
     profile: SafePesuProfile;
     attendance: SafePesuAttendanceSubject[];
     courses: SafePesuCourse[];
+    timetable?: SafePesuTimetable;
+    results?: SafePesuResults;
     errors?: {
         attendance?: string | null;
         courses?: string | null;
+        timetable?: string | null;
+        results?: string | null;
     };
 };
 
@@ -54,13 +109,21 @@ function isSafeSyncResponse(value: unknown): value is SafePesuSyncResponse {
     if (!value || typeof value !== "object") return false;
 
     const data = value as Partial<SafePesuSyncResponse>;
+    const timetableIsValid =
+        data.timetable === undefined ||
+        (Boolean(data.timetable) && Array.isArray(data.timetable.slots));
+    const resultsIsValid =
+        data.results === undefined ||
+        (Boolean(data.results) && Array.isArray(data.results.courses));
 
     return (
         data.ok === true &&
         data.source === "pesu" &&
         typeof data.syncedAt === "string" &&
         Array.isArray(data.attendance) &&
-        Array.isArray(data.courses)
+        Array.isArray(data.courses) &&
+        timetableIsValid &&
+        resultsIsValid
     );
 }
 
@@ -99,7 +162,20 @@ export async function syncPesuData({
 export function savePesuSyncCache(data: SafePesuSyncResponse) {
     if (typeof window === "undefined") return;
 
-    localStorage.setItem(PESU_SYNC_CACHE_KEY, JSON.stringify(data));
+    const safeData: SafePesuSyncResponse = {
+        ok: data.ok,
+        source: data.source,
+        syncedAt: data.syncedAt,
+        profile: data.profile,
+        attendance: data.attendance,
+        courses: data.courses,
+        timetable: data.timetable,
+        results: data.results,
+        errors: data.errors,
+    };
+
+    localStorage.setItem(PESU_SYNC_CACHE_KEY, JSON.stringify(safeData));
+    window.dispatchEvent(new Event(PESU_SYNC_EVENT));
 }
 
 export function getPesuSyncCache() {
@@ -128,6 +204,7 @@ export function clearPesuSyncCache() {
     if (typeof window === "undefined") return;
 
     localStorage.removeItem(PESU_SYNC_CACHE_KEY);
+    window.dispatchEvent(new Event(PESU_SYNC_EVENT));
 }
 
 export function mapPesuAttendanceToSubjects(

@@ -91,7 +91,7 @@ export function PesuResyncCard({
                 <div className="mt-5 grid gap-3 md:grid-cols-4">
                     <MiniInfo label="Status" value={connected ? "Connected" : "Offline"} />
                     <MiniInfo label="SRN" value={srn ?? "Not connected"} />
-                    <MiniInfo label="Connector" value={connectorMode || "mock"} />
+                    <MiniInfo label="Connector" value={connectorMode || "none"} />
                     <MiniInfo label="Storage" value="HTTP-only cookie" />
                 </div>
             </div>

@@ -26,13 +26,12 @@ import {
 import {
     attendanceSubjects,
     exams,
-    results,
-    timetable,
-    todayClasses,
 } from "@/lib/demo-data";
 import { normalizeSearch } from "@/lib/academic-utils";
 import { PesuSyncBadge } from "@/components/layout/PesuSyncBadge";
 import { usePesuAttendance } from "@/lib/hooks/use-pesu-attendance";
+import { usePesuResults } from "@/lib/hooks/use-pesu-results";
+import { usePesuTimetable } from "@/lib/hooks/use-pesu-timetable";
 import { useLocalAuth } from "@/lib/hooks/use-local-auth";
 import { pageMotion } from "@/lib/motion";
 
@@ -97,6 +96,13 @@ export function DashboardShell({
     const displayName = profile?.name ?? user?.name ?? user?.srn ?? "Student";
     const displaySrn = profile?.srn ?? user?.srn ?? "";
     const photoDataUrl = profile?.photoDataUrl ?? undefined;
+    const displayProfileMeta = [
+        profile?.branch,
+        profile?.semester,
+        profile?.section ? `Sec ${profile.section}` : "",
+    ]
+        .filter(Boolean)
+        .join(" • ");
 
     useEffect(() => {
         function handleKeyDown(event: KeyboardEvent) {
@@ -161,12 +167,18 @@ export function DashboardShell({
 
                             <div className="min-w-0">
                                 <p className="truncate text-xs font-black uppercase tracking-[0.16em] text-slate-600">
-                                    Local Session
+                                    {profile ? "PESU Session" : "Local Session"}
                                 </p>
 
                                 <p className="mt-1 truncate text-sm font-black text-slate-300">
                                     {displayName}
                                 </p>
+
+                                {displayProfileMeta && (
+                                    <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">
+                                        {displayProfileMeta}
+                                    </p>
+                                )}
                             </div>
                         </div>
 
@@ -438,6 +450,8 @@ function CommandPalette({
 }) {
     const router = useRouter();
     const { subjects: syncedSubjects } = usePesuAttendance();
+    const { slots: timetableSlots, todaySlots } = usePesuTimetable();
+    const { results: resultItems } = usePesuResults();
 
     const searchableAttendanceSubjects =
         syncedSubjects.length > 0 ? syncedSubjects : attendanceSubjects;
@@ -468,7 +482,7 @@ function CommandPalette({
                 } attendance`,
         }));
 
-        const todayItems = todayClasses.map((item) => ({
+        const todayItems = todaySlots.map((item) => ({
             title: item.subject,
             subtitle: `${item.time} • ${item.room} • Today`,
             href: "/today",
@@ -477,7 +491,7 @@ function CommandPalette({
             keywords: `${item.subject} ${item.code} ${item.time} ${item.room} ${item.faculty}`,
         }));
 
-        const timetableItems = timetable.map((item) => ({
+        const timetableItems = timetableSlots.map((item) => ({
             title: item.subject,
             subtitle: `${item.day} • ${item.time} • ${item.room}`,
             href: "/timetable",
@@ -486,7 +500,7 @@ function CommandPalette({
             keywords: `${item.subject} ${item.code} ${item.day} ${item.time} ${item.room} ${item.faculty}`,
         }));
 
-        const resultItems = results.map((item) => ({
+        const resultSearchItems = resultItems.map((item) => ({
             title: item.subject,
             subtitle: `${item.code} • ${item.total}% • Grade ${item.grade}`,
             href: "/results",
@@ -509,10 +523,10 @@ function CommandPalette({
             ...subjectItems,
             ...todayItems,
             ...timetableItems,
-            ...resultItems,
+            ...resultSearchItems,
             ...seatingItems,
         ];
-    }, [searchableAttendanceSubjects]);
+    }, [resultItems, searchableAttendanceSubjects, timetableSlots, todaySlots]);
 
     const filteredItems = useMemo(() => {
         const rawSearch = query.toLowerCase().trim();

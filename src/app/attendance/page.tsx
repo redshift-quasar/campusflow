@@ -20,8 +20,9 @@ import { MetricCard } from "@/components/dashboard/MetricCard";
 import { cardMotion, sectionMotion, staggerContainer } from "@/lib/motion";
 import { useLocalAuth } from "@/lib/hooks/use-local-auth";
 import { usePesuAttendance } from "@/lib/hooks/use-pesu-attendance";
+import { usePesuTimetable } from "@/lib/hooks/use-pesu-timetable";
 import { useSettingsStore } from "@/lib/store/settings-store";
-import { calendarEvents, timetable } from "@/lib/demo-data";
+import { calendarEvents } from "@/lib/demo-data";
 import {
     estimateSubjectInstructionalClassesBySemesterEnd,
     getAttendancePercent,
@@ -61,6 +62,7 @@ export default function AttendancePage() {
         resetAttendanceCache,
         usingDemoData,
     } = usePesuAttendance();
+    const { slots: timetableSlots } = usePesuTimetable();
 
     const excludedDates = useMemo(
         () =>
@@ -80,7 +82,7 @@ export default function AttendancePage() {
             .map((subject) => {
                 const remainingClasses = estimateSubjectInstructionalClassesBySemesterEnd({
                     subject,
-                    timetable,
+                    timetable: timetableSlots,
                     semesterStartDate,
                     semesterEndDate,
                     excludedDates,
@@ -107,6 +109,7 @@ export default function AttendancePage() {
         semesterEndDate,
         semesterStartDate,
         subjects,
+        timetableSlots,
     ]);
 
     const lowSubjects = getLowAttendanceSubjects(subjects, attendanceTarget);
