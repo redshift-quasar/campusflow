@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
     Award,
     BarChart3,
     BookOpen,
     GraduationCap,
+    RefreshCw,
     ShieldCheck,
     TrendingDown,
     TrendingUp,
@@ -39,7 +42,7 @@ import {
 
 type Tone = "blue" | "green" | "orange" | "violet" | "red";
 
-export default function ResultsPage() {
+function ResultsContent() {
     const { user } = useLocalAuth();
     const {
         results: resultItems,
@@ -52,6 +55,21 @@ export default function ResultsPage() {
     } = usePesuResults();
 
     const displayName = user?.name ?? user?.srn ?? "Student";
+
+    const searchParams = useSearchParams();
+    const codeParam = searchParams.get("code");
+
+    useEffect(() => {
+        if (codeParam) {
+            const el = document.getElementById(`course-${codeParam}`);
+            if (el) {
+                const timer = setTimeout(() => {
+                    el.scrollIntoView({ behavior: "smooth", block: "center" });
+                }, 150);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [codeParam]);
 
     const averageResult = getAverageResult(resultItems);
     const highestResult = getHighestResult(resultItems);
@@ -166,6 +184,7 @@ export default function ResultsPage() {
                                             key={result.code}
                                             result={result}
                                             course={course}
+                                            highlighted={result.code === codeParam}
                                         />
                                     );
                                 })}
@@ -315,6 +334,23 @@ export default function ResultsPage() {
     );
 }
 
+export default function ResultsPage() {
+    return (
+        <Suspense fallback={
+            <DashboardShell title="Results" subtitle="Loading academic record...">
+                <div className="flex h-[50vh] items-center justify-center">
+                    <div className="flex flex-col items-center gap-3">
+                        <RefreshCw className="h-8 w-8 animate-spin text-sky-400" />
+                        <p className="text-sm font-semibold text-slate-500">Loading results...</p>
+                    </div>
+                </div>
+            </DashboardShell>
+        }>
+            <ResultsContent />
+        </Suspense>
+    );
+}
+
 function ResultHeroCard({
     average,
     sgpa,
@@ -379,9 +415,11 @@ function ResultHeroCard({
 function ResultSubjectCard({
     result,
     course,
+    highlighted,
 }: {
     result: ResultItem;
     course?: SafePesuResultCourse;
+    highlighted?: boolean;
 }) {
     const status = getResultStatus(result.total);
     const tone = getResultTone(status);
@@ -389,8 +427,21 @@ function ResultSubjectCard({
 
     return (
         <motion.div
+            id={`course-${result.code}`}
             variants={cardMotion}
-            className="group relative overflow-hidden rounded-[1.45rem] border border-white/[0.07] bg-white/[0.035] p-4 shadow-xl shadow-black/10 backdrop-blur-2xl transition duration-500 hover:-translate-y-0.5 hover:bg-white/[0.06]"
+            className={`group relative overflow-hidden rounded-[1.45rem] border p-4 shadow-xl shadow-black/10 backdrop-blur-2xl transition duration-500 hover:-translate-y-0.5 hover:bg-white/[0.06] ${
+                highlighted
+                    ? tone === "green"
+                        ? "border-emerald-500/50 bg-emerald-500/[0.08] ring-2 ring-emerald-500/20"
+                        : tone === "blue"
+                        ? "border-sky-500/50 bg-sky-500/[0.08] ring-2 ring-sky-500/20"
+                        : tone === "orange"
+                        ? "border-orange-500/50 bg-orange-500/[0.08] ring-2 ring-orange-500/20"
+                        : tone === "red"
+                        ? "border-red-500/50 bg-red-500/[0.08] ring-2 ring-red-500/20"
+                        : "border-violet-500/50 bg-violet-500/[0.08] ring-2 ring-violet-500/20"
+                    : "border-white/[0.07] bg-white/[0.035]"
+            }`}
         >
             <div
                 className={`absolute -right-14 -top-14 h-32 w-32 rounded-full blur-3xl transition duration-500 group-hover:scale-125 ${toneClasses.glow}`}

@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { cardMotion, sectionMotion, staggerContainer } from "@/lib/motion";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { InfoRow } from "@/components/dashboard/InfoRow";
+import { RefreshCw } from "lucide-react";
 import {
     usePesuTimetable,
     type AppTimetableSlot,
@@ -36,7 +38,7 @@ function getTodayName() {
     });
 }
 
-export default function TimetablePage() {
+function TimetableContent() {
     const {
         slotsByDay,
         days,
@@ -47,11 +49,40 @@ export default function TimetablePage() {
     } = usePesuTimetable();
     const todayName = getTodayName();
     const [selectedDay, setSelectedDay] = useState(todayName);
+
+    const searchParams = useSearchParams();
+    const codeParam = searchParams.get("code");
+
+    useEffect(() => {
+        if (codeParam) {
+            const foundDayGroup = slotsByDay.find((group) =>
+                group.slots.some((slot) => slot.code === codeParam)
+            );
+            if (foundDayGroup) {
+                const timer = setTimeout(() => {
+                    setSelectedDay(foundDayGroup.day);
+                }, 0);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [codeParam, slotsByDay]);
     const selectedScheduleDay = days.includes(selectedDay)
         ? selectedDay
         : days.includes(todayName)
             ? todayName
             : days[0] ?? "Monday";
+
+    useEffect(() => {
+        if (codeParam) {
+            const el = document.getElementById(`slot-${codeParam}`);
+            if (el) {
+                const timer = setTimeout(() => {
+                    el.scrollIntoView({ behavior: "smooth", block: "center" });
+                }, 150);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [codeParam, selectedScheduleDay]);
 
     const selectedClasses = useMemo(() => {
         return (
@@ -229,6 +260,7 @@ export default function TimetablePage() {
                                             key={getTimetableSlotKey(item, index, "row")}
                                             item={item}
                                             isLast={index === selectedClasses.length - 1}
+                                            highlighted={item.code === codeParam}
                                         />
                                     ))
                                 ) : (
@@ -359,6 +391,23 @@ export default function TimetablePage() {
     );
 }
 
+export default function TimetablePage() {
+    return (
+        <Suspense fallback={
+            <DashboardShell title="Timetable" subtitle="Loading weekly schedule...">
+                <div className="flex h-[50vh] items-center justify-center">
+                    <div className="flex flex-col items-center gap-3">
+                        <RefreshCw className="h-8 w-8 animate-spin text-sky-400" />
+                        <p className="text-sm font-semibold text-slate-500">Loading schedule...</p>
+                    </div>
+                </div>
+            </DashboardShell>
+        }>
+            <TimetableContent />
+        </Suspense>
+    );
+}
+
 function MetricMotionCard({ children }: { children: React.ReactNode }) {
     return (
         <motion.div variants={cardMotion} className="smooth-card">
@@ -378,16 +427,18 @@ function getTimetableSlotKey(
 function TimetableRow({
     item,
     isLast,
+    highlighted,
 }: {
     item: AppTimetableSlot;
     isLast: boolean;
+    highlighted?: boolean;
 }) {
     const tone =
         item.type === "Lab" ? "orange" : item.type === "Tutorial" ? "violet" : "blue";
     const endTime = getSlotEndTime(item);
 
     return (
-        <motion.div variants={cardMotion} className="grid grid-cols-[86px_1fr] gap-4">
+        <motion.div id={`slot-${item.code}`} variants={cardMotion} className="grid grid-cols-[86px_1fr] gap-4">
             <div className="pt-4 text-right">
                 <p className="text-sm font-black text-slate-300">{getSlotStartTime(item)}</p>
                 <p className="mt-1 text-xs text-slate-600">{endTime}</p>
@@ -403,7 +454,11 @@ function TimetableRow({
                         <div className="absolute left-1/2 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-300" />
                     </div>
 
-                    <div className="flex-1 rounded-[1.5rem] border border-white/[0.07] bg-white/[0.035] p-5 backdrop-blur-xl transition duration-500 ease-out hover:-translate-y-0.5 hover:bg-white/[0.055]">
+                    <div className={`flex-1 rounded-[1.5rem] border p-5 backdrop-blur-xl transition duration-500 ease-out hover:-translate-y-0.5 hover:bg-white/[0.055] ${
+                        highlighted
+                            ? "border-sky-500/50 bg-sky-500/[0.08] ring-2 ring-sky-500/20"
+                            : "border-white/[0.07] bg-white/[0.035]"
+                    }`}>
                         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <div className="flex flex-wrap items-center gap-2">

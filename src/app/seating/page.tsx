@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
     Armchair,
@@ -10,6 +11,7 @@ import {
     DoorOpen,
     FileText,
     MapPin,
+    RefreshCw,
     Search,
     TicketCheck,
 } from "lucide-react";
@@ -31,7 +33,7 @@ import {
 
 type Tone = "blue" | "green" | "orange" | "violet" | "red" | "slate";
 
-export default function SeatingPage() {
+function SeatingContent() {
     const { user } = useLocalAuth();
 
     const displayName = user?.name ?? user?.srn ?? "Student";
@@ -47,6 +49,25 @@ export default function SeatingPage() {
         error,
         syncedAt,
     } = usePesuSeating();
+
+    const searchParams = useSearchParams();
+    const codeParam = searchParams.get("code");
+
+    useEffect(() => {
+        if (codeParam) {
+            const matchedExam = seatingExams.find((exam) => exam.code === codeParam);
+            if (matchedExam) {
+                const timer = setTimeout(() => {
+                    setSelectedExamId(matchedExam.id);
+                    const el = document.getElementById(`exam-${matchedExam.code}`);
+                    if (el) {
+                        el.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }
+                }, 150);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [codeParam, seatingExams]);
 
     const isPesuLive = source === "pesu";
 
@@ -344,6 +365,23 @@ export default function SeatingPage() {
     );
 }
 
+export default function SeatingPage() {
+    return (
+        <Suspense fallback={
+            <DashboardShell title="Exam Seating" subtitle="Loading seating details...">
+                <div className="flex h-[50vh] items-center justify-center">
+                    <div className="flex flex-col items-center gap-3">
+                        <RefreshCw className="h-8 w-8 animate-spin text-sky-400" />
+                        <p className="text-sm font-semibold text-slate-500">Loading seating records...</p>
+                    </div>
+                </div>
+            </DashboardShell>
+        }>
+            <SeatingContent />
+        </Suspense>
+    );
+}
+
 function SeatingHeroCard({ exam }: { exam?: ExamSeat }) {
     return (
         <div className="studio-card-soft p-5">
@@ -404,6 +442,7 @@ function ExamCard({
 }) {
     return (
         <motion.button
+            id={`exam-${exam.code}`}
             type="button"
             variants={cardMotion}
             onClick={onClick}

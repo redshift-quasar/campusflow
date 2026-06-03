@@ -56,6 +56,16 @@ type SearchPreviewItem = {
     meta: SearchPreviewMeta;
 };
 
+function withQueryParam(baseHref: string, key: string, value?: string | null) {
+    const cleanValue = value?.trim();
+
+    if (!cleanValue) {
+        return baseHref;
+    }
+
+    return `${baseHref}?${key}=${encodeURIComponent(cleanValue)}`;
+}
+
 export function CommandPalette({
     onClose,
     pathname,
@@ -113,7 +123,7 @@ export function CommandPalette({
             return {
                 title: subject.name,
                 subtitle: `${subject.code} • Attendance • ${subject.faculty ?? "Faculty not synced"}`,
-                href: "/attendance",
+                href: withQueryParam("/attendance", "subject", subject.code),
                 icon: BarChart3,
                 group: "Subjects",
                 keywords: `${subject.name} ${subject.code} ${subject.faculty ?? ""} attendance`,
@@ -133,7 +143,7 @@ export function CommandPalette({
         const todayItems = todaySlots.map((item) => ({
             title: item.subject,
             subtitle: `${item.time} • ${item.room} • Today`,
-            href: "/today",
+            href: withQueryParam("/timetable", "code", item.code),
             icon: Clock3,
             group: "Today",
             keywords: `${item.subject} ${item.code} ${item.time} ${item.room} ${item.faculty}`,
@@ -151,7 +161,7 @@ export function CommandPalette({
         const timetableItems = timetableSlots.map((item) => ({
             title: item.subject,
             subtitle: `${item.day} • ${item.time} • ${item.room}`,
-            href: "/timetable",
+            href: withQueryParam("/timetable", "code", item.code),
             icon: CalendarDays,
             group: "Timetable",
             keywords: `${item.subject} ${item.code} ${item.day} ${item.time} ${item.room} ${item.faculty}`,
@@ -169,7 +179,7 @@ export function CommandPalette({
         const resultSearchItems = resultItems.map((item) => ({
             title: item.subject,
             subtitle: `${item.code} • ${item.total}% • Grade ${item.grade}`,
-            href: "/results",
+            href: withQueryParam("/results", "code", item.code),
             icon: FileText,
             group: "Results",
             keywords: `${item.subject} ${item.code} ${item.grade} result marks`,
@@ -186,7 +196,7 @@ export function CommandPalette({
         const seatingItems = seatingRecords.map((exam) => ({
             title: exam.subject,
             subtitle: `${exam.exam} • ${getExamLocationText(exam.room, exam.block)} • Terminal ${exam.seat}`,
-            href: "/seating",
+            href: withQueryParam("/seating", "code", exam.code),
             icon: Armchair,
             group: "Exam Seating",
             keywords: `${exam.subject} ${exam.code} ${exam.exam} ${exam.room} ${exam.seat} ${exam.block} terminal seating room block`,
@@ -520,9 +530,10 @@ export function CommandPalette({
 
                                             <div className="space-y-1">
                                                 {group.items.map(({ item, index }) => {
+                                                    const basePath = item.href.split("?")[0];
                                                     const currentPage =
-                                                        pathname === item.href ||
-                                                        pathname.startsWith(`${item.href}/`);
+                                                        pathname === basePath ||
+                                                        pathname.startsWith(`${basePath}/`);
 
                                                     const keyboardActive = index === activeSearchIndex;
 

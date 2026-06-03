@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
     AlertTriangle,
@@ -45,8 +46,22 @@ import {
 
 type Tone = "blue" | "green" | "orange" | "violet" | "red" | "slate";
 
-export default function AttendancePage() {
+function AttendanceContent() {
     const { user } = useLocalAuth();
+    const searchParams = useSearchParams();
+    const subjectParam = searchParams.get("subject");
+
+    useEffect(() => {
+        if (subjectParam) {
+            const el = document.getElementById(`subject-${subjectParam}`);
+            if (el) {
+                const timer = setTimeout(() => {
+                    el.scrollIntoView({ behavior: "smooth", block: "center" });
+                }, 150);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [subjectParam]);
 
     const displayName = user?.name ?? user?.srn ?? "Student";
 
@@ -251,6 +266,7 @@ export default function AttendancePage() {
                                         subject={item.subject}
                                         target={attendanceTarget}
                                         remainingClasses={item.remainingClasses}
+                                        highlighted={item.subject.code === subjectParam}
                                     />
                                 ))}
                             </motion.div>
@@ -439,6 +455,23 @@ export default function AttendancePage() {
     );
 }
 
+export default function AttendancePage() {
+    return (
+        <Suspense fallback={
+            <DashboardShell title="Attendance" subtitle="Loading your live attendance summary...">
+                <div className="flex h-[50vh] items-center justify-center">
+                    <div className="flex flex-col items-center gap-3">
+                        <RefreshCw className="h-8 w-8 animate-spin text-sky-400" />
+                        <p className="text-sm font-semibold text-slate-500">Loading attendance data...</p>
+                    </div>
+                </div>
+            </DashboardShell>
+        }>
+            <AttendanceContent />
+        </Suspense>
+    );
+}
+
 function AttendanceHeroCard({
     average,
     target,
@@ -514,10 +547,12 @@ function AttendanceSubjectCard({
     subject,
     target,
     remainingClasses,
+    highlighted,
 }: {
     subject: AttendanceSubject;
     target: number;
     remainingClasses: number;
+    highlighted?: boolean;
 }) {
     const percent = getAttendancePercent(subject);
     const tone = getAttendanceTone(subject, target);
@@ -527,8 +562,17 @@ function AttendanceSubjectCard({
 
     return (
         <motion.div
+            id={`subject-${subject.code}`}
             variants={cardMotion}
-            className="group relative overflow-hidden rounded-[1.55rem] border border-white/[0.07] bg-white/[0.035] p-4 shadow-xl shadow-black/10 backdrop-blur-2xl transition duration-500 hover:-translate-y-0.5 hover:bg-white/[0.06]"
+            className={`group relative overflow-hidden rounded-[1.55rem] border p-4 shadow-xl shadow-black/10 backdrop-blur-2xl transition duration-500 hover:-translate-y-0.5 hover:bg-white/[0.06] ${
+                highlighted
+                    ? progressTone === "green"
+                        ? "border-emerald-500/50 bg-emerald-500/[0.08] ring-2 ring-emerald-500/20"
+                        : progressTone === "orange"
+                        ? "border-orange-500/50 bg-orange-500/[0.08] ring-2 ring-orange-500/20"
+                        : "border-red-500/50 bg-red-500/[0.08] ring-2 ring-red-500/20"
+                    : "border-white/[0.07] bg-white/[0.035]"
+            }`}
         >
             <div
                 className={`absolute -right-14 -top-14 h-32 w-32 rounded-full blur-3xl transition duration-500 group-hover:scale-125 ${toneClasses.glow}`}
