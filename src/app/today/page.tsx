@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 
 type SlotStatus = "completed" | "ongoing" | "upcoming";
+type SelectedDayPhase = "previous" | "today" | "next";
 type TodayDisplaySlot = AppTimetableSlot & {
     status: SlotStatus;
     duration: string;
@@ -42,6 +43,23 @@ function getTodayName() {
     return new Date().toLocaleDateString("en-US", {
         weekday: "long",
     });
+}
+
+function getSelectedDayPhase(
+    days: string[],
+    selectedDay: string,
+    todayName: string
+): SelectedDayPhase {
+    if (selectedDay === todayName) return "today";
+
+    const selectedIndex = days.indexOf(selectedDay);
+    const todayIndex = days.indexOf(todayName);
+
+    if (selectedIndex >= 0 && todayIndex >= 0 && selectedIndex < todayIndex) {
+        return "previous";
+    }
+
+    return "next";
 }
 
 export default function TodayPage() {
@@ -55,6 +73,11 @@ export default function TodayPage() {
             : days.includes(todayName)
                 ? todayName
                 : days[0] ?? todayName;
+    const selectedDayPhase = getSelectedDayPhase(
+        days,
+        selectedScheduleDay,
+        todayName
+    );
 
     const selectedRawSlots = useMemo(() => {
         if (selectedScheduleDay === todayName) return todaySlots;
@@ -67,15 +90,14 @@ export default function TodayPage() {
 
     const selectedClasses = useMemo(() => {
         return selectedRawSlots.map((slot) =>
-            toTodayDisplaySlot(slot, selectedScheduleDay === todayName)
+            toTodayDisplaySlot(slot, selectedDayPhase)
         );
-    }, [selectedScheduleDay, selectedRawSlots, todayName]);
+    }, [selectedDayPhase, selectedRawSlots]);
 
     const currentClass = useMemo(() => {
         return (
             selectedClasses.find((item) => item.status === "ongoing") ??
             selectedClasses.find((item) => item.status === "upcoming") ??
-            selectedClasses[0] ??
             null
         );
     }, [selectedClasses]);
@@ -91,6 +113,11 @@ export default function TodayPage() {
     const upcoming = selectedClasses.filter(
         (item) => item.status === "upcoming"
     ).length;
+    const allClassesCompleted =
+        (selectedDayPhase === "today" || selectedDayPhase === "previous") &&
+        selectedClasses.length > 0 &&
+        completed === selectedClasses.length;
+    const showingFirstClass = selectedDayPhase === "next" && Boolean(currentClass);
     const firstClass = selectedClasses[0] ?? null;
     const lastClass = selectedClasses[selectedClasses.length - 1] ?? null;
     const labCount = selectedClasses.filter((item) => item.type === "Lab").length;
@@ -114,36 +141,42 @@ export default function TodayPage() {
                     >
                         <div className="studio-card-soft p-5">
                             <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
-                                Current Class
+                                {showingFirstClass ? "First Class" : "Current Class"}
                             </p>
 
                             <h3 className="mt-4 text-3xl font-black tracking-tight">
-                                {currentClass?.subject ?? "No class scheduled"}
+                                {allClassesCompleted
+                                    ? "All classes completed"
+                                    : currentClass?.subject ?? "No class scheduled"}
                             </h3>
 
                             <p className="mt-2 text-sm leading-6 text-slate-400">
-                                {currentClass
+                                {allClassesCompleted
+                                    ? "Enjoy your day."
+                                    : currentClass
                                     ? `${currentClass.room} • ${currentClass.time} • ${currentClass.duration}`
                                     : `${selectedDayLabel} has no timetable slots.`}
                             </p>
 
-                            <div className="mt-5 grid grid-cols-2 gap-3">
-                                <StudioMini label="Code" value={currentClass?.code ?? "-"} />
-                                <StudioMini label="Type" value={currentClass?.type ?? "-"} />
-                                <StudioMini
-                                    label={source === "pesu" ? "PESU Live" : "Source"}
-                                    value={
-                                        source === "pesu"
-                                            ? formatOptionalDate(lastFinalizedAt) || "Live"
-                                            : "Demo"
-                                    }
-                                />
-                                <StudioMini
-                                    label="Faculty"
-                                    value={currentClass?.faculty ?? "-"}
-                                    wide
-                                />
-                            </div>
+                            {!allClassesCompleted && (
+                                <div className="mt-5 grid grid-cols-2 gap-3">
+                                    <StudioMini label="Code" value={currentClass?.code ?? "-"} />
+                                    <StudioMini label="Type" value={currentClass?.type ?? "-"} />
+                                    <StudioMini
+                                        label={source === "pesu" ? "PESU Live" : "Source"}
+                                        value={
+                                            source === "pesu"
+                                                ? formatOptionalDate(lastFinalizedAt) || "Live"
+                                                : "Demo"
+                                        }
+                                    />
+                                    <StudioMini
+                                        label="Faculty"
+                                        value={currentClass?.faculty ?? "-"}
+                                        wide
+                                    />
+                                </div>
+                            )}
                         </div>
                     </StudioHero>
                 </PremiumJoinItem>
@@ -272,27 +305,43 @@ export default function TodayPage() {
                                         <p className="text-sm font-semibold text-slate-400">Now</p>
 
                                         <h2 className="mt-2 text-2xl font-black tracking-tight">
-                                            Current Class
+                                            {showingFirstClass ? "First Class" : "Current Class"}
                                         </h2>
 
                                         <p className="mt-2 text-sm leading-6 text-slate-500">
-                                            Live class details for the active slot.
+                                            {allClassesCompleted
+                                                ? "Enjoy your day."
+                                                : showingFirstClass
+                                                    ? `First class for ${selectedDayLabel}.`
+                                                    : "Live class details for the active slot."}
                                         </p>
                                     </div>
 
-                                    <StudioIconBubble icon={BookOpen} tone="blue" />
+                                    <StudioIconBubble
+                                        icon={allClassesCompleted ? CheckCircle2 : BookOpen}
+                                        tone={allClassesCompleted ? "green" : "blue"}
+                                    />
                                 </div>
 
                                 <div className="studio-card-soft mt-6 p-5">
                                     <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-600">
-                                        {currentClass?.code ?? "NO SLOT"}
+                                        {allClassesCompleted
+                                            ? "COMPLETED"
+                                            : currentClass?.code ?? "NO SLOT"}
                                     </p>
 
                                     <h3 className="mt-2 text-2xl font-black tracking-tight">
-                                        {currentClass?.subject ?? "No class scheduled"}
+                                        {allClassesCompleted
+                                            ? "All classes completed"
+                                            : currentClass?.subject ?? "No class scheduled"}
                                     </h3>
 
-                                    <div className="mt-5">
+                                    {allClassesCompleted ? (
+                                        <p className="mt-4 text-sm font-semibold text-slate-400">
+                                            Enjoy your day.
+                                        </p>
+                                    ) : (
+                                        <div className="mt-5">
                                         <InfoRow
                                             label="Time"
                                             value={
@@ -306,7 +355,10 @@ export default function TodayPage() {
                                             label="Faculty"
                                             value={currentClass?.faculty ?? "-"}
                                         />
-                                        <InfoRow label="Type" value={currentClass?.type ?? "-"} />
+                                        <InfoRow
+                                            label="Type"
+                                            value={currentClass?.type ?? "-"}
+                                        />
                                         <InfoRow label="Source" value={sourceLabel} />
                                         {source === "pesu" && lastFinalizedAt && (
                                             <InfoRow
@@ -314,7 +366,8 @@ export default function TodayPage() {
                                                 value={formatOptionalDate(lastFinalizedAt)}
                                             />
                                         )}
-                                    </div>
+                                        </div>
+                                    )}
                                 </div>
                             </section>
                         </PremiumJoinItem>
@@ -390,11 +443,18 @@ function MetricMotionCard({ children }: { children: ReactNode }) {
 
 function toTodayDisplaySlot(
     slot: AppTimetableSlot,
-    compareWithCurrentTime: boolean
+    selectedDayPhase: SelectedDayPhase
 ): TodayDisplaySlot {
+    const status =
+        selectedDayPhase === "today"
+            ? getSlotStatus(slot)
+            : selectedDayPhase === "previous"
+                ? "completed"
+                : "upcoming";
+
     return {
         ...slot,
-        status: compareWithCurrentTime ? getSlotStatus(slot) : "upcoming",
+        status,
         duration: getSlotDuration(slot),
     };
 }
