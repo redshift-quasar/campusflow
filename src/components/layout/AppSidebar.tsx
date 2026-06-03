@@ -20,9 +20,9 @@ const SIDEBAR_EXPANDED_STORAGE_KEY = "campusflow:sidebar-expanded";
 
 const sidebarLayoutTransition = {
     type: "spring",
-    stiffness: 260,
-    damping: 32,
-    mass: 0.85,
+    stiffness: 180,
+    damping: 26,
+    mass: 0.95,
 } as const;
 
 let rememberedSidebarExpanded = false;
@@ -91,6 +91,7 @@ export function AppSidebar({
     logout: () => void;
 }) {
     const sidebarRef = useRef<HTMLElement | null>(null);
+
     const sidebarExpanded = useSyncExternalStore(
         subscribeSidebarExpanded,
         getSidebarExpandedSnapshot,
@@ -111,6 +112,7 @@ export function AppSidebar({
             if (!sidebar) return;
 
             const rect = sidebar.getBoundingClientRect();
+
             const pointerInside =
                 event.clientX >= rect.left &&
                 event.clientX <= rect.right &&
@@ -133,6 +135,7 @@ export function AppSidebar({
             onMouseEnter={() => setSidebarExpanded(true)}
             onMouseLeave={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect();
+
                 const pointerInside =
                     event.clientX >= rect.left &&
                     event.clientX <= rect.right &&
@@ -143,27 +146,27 @@ export function AppSidebar({
                     setSidebarExpanded(false);
                 }
             }}
-            className={`fixed left-0 top-0 z-40 hidden h-screen overflow-visible bg-transparent px-3 py-5 shadow-none backdrop-blur-none transition-[width] duration-500 ease-out lg:block ${sidebarExpanded ? "w-72" : "w-20"
+            className={`fixed left-0 top-0 z-40 hidden h-screen overflow-visible bg-transparent px-3 py-5 shadow-none backdrop-blur-none transition-[width] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] lg:block ${sidebarExpanded ? "w-72" : "w-20"
                 }`}
         >
             <div
-                className={`pointer-events-none absolute rounded-[1.8rem] border border-white/[0.08] bg-[#050814]/58 shadow-[18px_0_70px_rgba(0,0,0,0.24)] backdrop-blur-[28px] backdrop-saturate-150 transition-all duration-500 ease-out ${sidebarExpanded
-                    ? "left-3 right-3 top-4 bottom-4 bg-[#050814]/78"
-                    : "left-1/2 top-1/2 h-[36rem] w-14 -translate-x-1/2 -translate-y-1/2 bg-[#050814]/52"
+                className={`pointer-events-none absolute rounded-[1.8rem] border border-white/[0.08] bg-[#050814]/58 shadow-[18px_0_70px_rgba(0,0,0,0.24)] backdrop-blur-[28px] backdrop-saturate-150 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${sidebarExpanded
+                        ? "left-3 right-3 top-4 bottom-4 bg-[#050814]/78"
+                        : "left-1/2 top-1/2 h-[36rem] w-14 -translate-x-1/2 -translate-y-1/2 bg-[#050814]/52"
                     }`}
             />
 
             <div
-                className={`pointer-events-none absolute rounded-[1.8rem] bg-gradient-to-b from-white/[0.08] via-white/[0.02] to-white/[0.04] transition-all duration-500 ease-out ${sidebarExpanded
-                    ? "left-3 right-3 top-4 bottom-4"
-                    : "left-1/2 top-1/2 h-[36rem] w-14 -translate-x-1/2 -translate-y-1/2"
+                className={`pointer-events-none absolute rounded-[1.8rem] bg-gradient-to-b from-white/[0.08] via-white/[0.02] to-white/[0.04] transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${sidebarExpanded
+                        ? "left-3 right-3 top-4 bottom-4"
+                        : "left-1/2 top-1/2 h-[36rem] w-14 -translate-x-1/2 -translate-y-1/2"
                     }`}
             />
 
             <div
-                className={`pointer-events-none absolute w-px bg-gradient-to-b from-transparent via-white/20 to-transparent transition-all duration-500 ease-out ${sidebarExpanded
-                    ? "right-3 top-8 bottom-8"
-                    : "left-1/2 top-1/2 h-[32rem] translate-x-7 -translate-y-1/2"
+                className={`pointer-events-none absolute w-px bg-gradient-to-b from-transparent via-white/20 to-transparent transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${sidebarExpanded
+                        ? "right-3 top-8 bottom-8"
+                        : "left-1/2 top-1/2 h-[32rem] translate-x-7 -translate-y-1/2"
                     }`}
             />
 
@@ -171,26 +174,26 @@ export function AppSidebar({
                 <motion.div
                     layout
                     transition={sidebarLayoutTransition}
-                    className={`absolute transition-all duration-500 ease-out ${sidebarExpanded
-                        ? "left-0 top-0 w-full translate-x-0"
-                        : "left-1/2 top-[calc(50%-16.25rem)] w-12 -translate-x-1/2"
+                    className={`absolute transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${sidebarExpanded
+                            ? "left-0 top-0 w-full translate-x-0"
+                            : "left-1/2 top-[calc(50%-16.25rem)] w-12 -translate-x-1/2"
                         }`}
                 >
                     <Link
                         href="/dashboard"
                         aria-label="CampusFlow dashboard"
                         onClick={() => setSidebarExpanded(true)}
-                        className={`group flex items-center overflow-hidden rounded-2xl transition-all duration-300 ease-out ${sidebarExpanded
-                            ? "w-full justify-start px-3"
-                            : "h-12 w-12 justify-center px-0"
+                        className={`group flex items-center overflow-hidden rounded-2xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${sidebarExpanded
+                                ? "w-full justify-start px-3"
+                                : "h-12 w-12 justify-center px-0"
                             }`}
                     >
                         <SidebarLogo />
 
                         <div
-                            className={`overflow-hidden whitespace-nowrap transition-all duration-300 ${sidebarExpanded
-                                ? "ml-3 max-w-44 translate-x-0 opacity-100"
-                                : "pointer-events-none ml-0 max-w-0 translate-x-2 opacity-0"
+                            className={`overflow-hidden whitespace-nowrap transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${sidebarExpanded
+                                    ? "ml-3 max-w-44 translate-x-0 opacity-100"
+                                    : "pointer-events-none ml-0 max-w-0 translate-x-2 opacity-0"
                                 }`}
                         >
                             <h1 className="text-base font-black tracking-tight text-white">
@@ -204,7 +207,7 @@ export function AppSidebar({
                 </motion.div>
 
                 <nav
-                    className={`absolute left-0 right-0 top-1/2 -translate-y-1/2 space-y-2 ${sidebarExpanded ? "w-full" : "mx-auto w-12"
+                    className={`absolute left-0 right-0 top-1/2 -translate-y-1/2 space-y-2 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${sidebarExpanded ? "w-full" : "mx-auto w-12"
                         }`}
                 >
                     {navItems.map((item) => (
@@ -221,14 +224,14 @@ export function AppSidebar({
                 <motion.div
                     layout
                     transition={sidebarLayoutTransition}
-                    className={`absolute overflow-hidden rounded-[1.5rem] transition-all duration-500 ease-out ${sidebarExpanded
-                        ? "left-0 top-[calc(100%-8.75rem)] w-full translate-x-0 px-3 py-3"
-                        : "left-1/2 top-[calc(50%+13.25rem)] w-14 -translate-x-1/2 px-0 py-0"
+                    className={`absolute overflow-hidden rounded-[1.5rem] transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${sidebarExpanded
+                            ? "left-0 top-[calc(100%-8.75rem)] w-full translate-x-0 px-3 py-3"
+                            : "left-1/2 top-[calc(50%+13.25rem)] w-14 -translate-x-1/2 px-0 py-0"
                         }`}
                     aria-label={`${profileLabel} profile`}
                 >
                     <div
-                        className={`flex items-center transition-all duration-300 ease-out ${sidebarExpanded ? "justify-start" : "justify-center"
+                        className={`flex items-center transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${sidebarExpanded ? "justify-start" : "justify-center"
                             }`}
                     >
                         <ProfileAvatar
@@ -238,9 +241,9 @@ export function AppSidebar({
                         />
 
                         <div
-                            className={`min-w-0 overflow-hidden whitespace-nowrap transition-all duration-300 ${sidebarExpanded
-                                ? "pointer-events-auto ml-3 max-w-44 translate-x-0 opacity-100"
-                                : "pointer-events-none ml-0 max-w-0 translate-x-2 opacity-0"
+                            className={`min-w-0 overflow-hidden whitespace-nowrap transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${sidebarExpanded
+                                    ? "pointer-events-auto ml-3 max-w-44 translate-x-0 opacity-100"
+                                    : "pointer-events-none ml-0 max-w-0 translate-x-2 opacity-0"
                                 }`}
                         >
                             <p className="truncate text-xs font-black uppercase tracking-[0.16em] text-slate-600">
@@ -261,9 +264,9 @@ export function AppSidebar({
 
                     <button
                         onClick={logout}
-                        className={`flex w-full translate-y-2 items-center justify-center gap-2 overflow-hidden rounded-2xl bg-white px-4 text-xs font-black text-slate-950 opacity-0 shadow-lg shadow-white/5 transition-all duration-300 hover:bg-[#ded7ff] ${sidebarExpanded
-                            ? "pointer-events-auto mt-4 max-h-20 translate-y-0 py-3 opacity-100"
-                            : "pointer-events-none mt-0 max-h-0 py-0"
+                        className={`flex w-full translate-y-2 items-center justify-center gap-2 overflow-hidden rounded-2xl bg-white px-4 text-xs font-black text-slate-950 opacity-0 shadow-lg shadow-white/5 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[#ded7ff] ${sidebarExpanded
+                                ? "pointer-events-auto mt-4 max-h-20 translate-y-0 py-3 opacity-100"
+                                : "pointer-events-none mt-0 max-h-0 py-0"
                             }`}
                     >
                         <LogOut size={15} />
@@ -279,7 +282,7 @@ function SidebarLogo() {
     const [failed, setFailed] = useState(false);
 
     return (
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-[#b7a8ff] transition group-hover:scale-105">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-[#b7a8ff] transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-105">
             {!failed ? (
                 <Image
                     src="/campusflow-logo.png"
@@ -317,9 +320,9 @@ function SidebarLink({
             aria-label={item.label}
             aria-current={active ? "page" : undefined}
             onClick={onNavigate}
-            className={`group/nav relative flex items-center overflow-visible rounded-2xl text-sm font-bold transition-all duration-300 ${expanded
-                ? "w-full justify-start gap-3 px-4 py-3"
-                : "mx-auto h-12 w-12 justify-center px-0 py-0"
+            className={`group/nav relative flex items-center overflow-visible rounded-2xl text-sm font-bold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${expanded
+                    ? "w-full justify-start gap-3 px-4 py-3"
+                    : "mx-auto h-12 w-12 justify-center px-0 py-0"
                 } ${active
                     ? expanded
                         ? "bg-white/[0.045] text-white"
@@ -328,9 +331,9 @@ function SidebarLink({
                 }`}
         >
             <span
-                className={`relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl transition-all duration-300 group-hover/nav:scale-105 ${active
-                    ? "bg-sky-300/[0.12] text-sky-100 shadow-[0_0_24px_rgba(125,211,252,0.14)]"
-                    : "text-slate-500 group-hover/nav:text-white"
+                className={`relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/nav:scale-105 ${active
+                        ? "bg-sky-300/[0.12] text-sky-100 shadow-[0_0_24px_rgba(125,211,252,0.14)]"
+                        : "text-slate-500 group-hover/nav:text-white"
                     }`}
             >
                 {active && (
@@ -362,9 +365,9 @@ function SidebarLink({
             </span>
 
             <span
-                className={`relative z-10 overflow-hidden whitespace-nowrap transition-all duration-300 ${expanded
-                    ? "w-auto translate-x-0 opacity-100"
-                    : "w-0 translate-x-2 opacity-0"
+                className={`relative z-10 overflow-hidden whitespace-nowrap transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${expanded
+                        ? "w-auto translate-x-0 opacity-100"
+                        : "w-0 translate-x-2 opacity-0"
                     } ${active ? "text-white" : "text-slate-500 group-hover/nav:text-white"}`}
             >
                 {item.label}

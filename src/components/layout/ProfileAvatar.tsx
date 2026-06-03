@@ -15,7 +15,6 @@ export function ProfileAvatar({
     photoDataUrl?: string;
     compact?: boolean;
     size?: "default" | "nav";
-    closePreviewWhen?: boolean;
 }) {
     const [previewOpen, setPreviewOpen] = useState(false);
 
