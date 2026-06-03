@@ -54,6 +54,8 @@ export type SafePesuTimetable = {
     slots: SafePesuTimetableSlot[];
     days?: string[];
     roomId?: string | null;
+    currentSemid?: string | null;
+    semesterIds?: string[];
     lastFinalizedAt?: string | null;
 };
 
@@ -120,6 +122,8 @@ export type SafePesuSyncInput = {
     srn: string;
     password: string;
     semester?: number;
+    semesterId?: string | number;
+    semid?: string | number;
 };
 
 function isSafeSyncResponse(value: unknown): value is SafePesuSyncResponse {
@@ -152,6 +156,8 @@ export async function syncPesuData({
     srn,
     password,
     semester,
+    semesterId,
+    semid,
 }: SafePesuSyncInput) {
     const response = await fetch("/api/pesu/sync", {
         method: "POST",
@@ -163,6 +169,8 @@ export async function syncPesuData({
             srn,
             password,
             semester,
+            semesterId,
+            semid,
         }),
     });
 

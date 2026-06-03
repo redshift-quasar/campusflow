@@ -58,6 +58,20 @@ function numberOrZero(value: number | null | undefined) {
     return value;
 }
 
+function cleanResultText(value?: string | null) {
+    const text = value?.trim() ?? "";
+
+    if (
+        ["", "NA", "N/A", "NULL", "NONE", "TAL", "UNDEFINED"].includes(
+            text.toUpperCase()
+        )
+    ) {
+        return "";
+    }
+
+    return text;
+}
+
 function getCoursePercent(course: SafePesuResultCourse) {
     const scoredAssessments = course.assessments.filter(
         (assessment) =>
@@ -90,10 +104,10 @@ function createResultsSnapshot(
     if (!results?.courses.length) return null;
 
     const mappedResults: ResultItem[] = results.courses.map((course) => ({
-        code: course.code || "-",
-        subject: course.name || course.code || "-",
+        code: cleanResultText(course.code) || "-",
+        subject: cleanResultText(course.name) || cleanResultText(course.code) || "-",
         total: getCoursePercent(course),
-        grade: course.grade ?? null,
+        grade: cleanResultText(course.grade) || null,
         credits: course.credits ?? null,
     }));
 

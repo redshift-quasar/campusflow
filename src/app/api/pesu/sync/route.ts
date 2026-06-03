@@ -9,6 +9,8 @@ type PesuSyncRequest = {
     username?: string;
     password?: string;
     semester?: number;
+    semesterId?: string | number;
+    semid?: string | number;
 };
 
 export async function POST(request: Request) {
@@ -34,6 +36,7 @@ export async function POST(request: Request) {
             username,
             password,
             semester: body.semester,
+            semid: body.semid ?? body.semesterId,
         });
 
         return NextResponse.json(result);

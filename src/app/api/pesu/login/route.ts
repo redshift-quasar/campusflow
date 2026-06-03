@@ -14,6 +14,8 @@ type PesuLoginRequest = {
     username?: string;
     password?: string;
     semester?: number;
+    semid?: string | number;
+    semesterId?: string | number;
 };
 
 export async function POST(request: Request) {
@@ -39,6 +41,7 @@ export async function POST(request: Request) {
             username,
             password,
             semester: body.semester,
+            semid: body.semid ?? body.semesterId,
         });
 
         const record = createPesuSession(safeSync);

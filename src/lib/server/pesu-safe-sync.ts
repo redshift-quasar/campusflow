@@ -6,6 +6,7 @@ type PesuSyncInput = {
     username: string;
     password: string;
     semester?: number;
+    semid?: string | number;
 };
 
 function getPythonPath() {
@@ -52,6 +53,7 @@ export function runCampusFlowPesuSync({
     username,
     password,
     semester,
+    semid,
 }: PesuSyncInput) {
     return new Promise<SafePesuSyncResponse>((resolve, reject) => {
         const child = spawn(getPythonPath(), ["scripts/campusflow_pesu.py"], {
@@ -111,6 +113,7 @@ export function runCampusFlowPesuSync({
                 username,
                 password,
                 semester,
+                semid,
                 syncedAt: new Date().toISOString(),
             })
         );

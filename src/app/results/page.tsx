@@ -47,7 +47,11 @@ function displayValue(value?: string | number | null) {
 
     const text = String(value).trim();
 
-    return text ? text : "-";
+    if (["", "NA", "N/A", "NULL", "NONE", "TAL", "UNDEFINED"].includes(text.toUpperCase())) {
+        return "-";
+    }
+
+    return text;
 }
 
 function displayFixed(value?: number | null) {
@@ -78,6 +82,16 @@ function displayCreditPair(
     }
 
     return `${displayValue(earnedCredits)}/${displayValue(totalCredits)}`;
+}
+
+function displayCourseCredits(credits?: number | null, maxCredits?: number | null) {
+    if (credits === null || credits === undefined) return "-";
+
+    if (maxCredits === null || maxCredits === undefined) {
+        return displayValue(credits);
+    }
+
+    return `${displayValue(credits)}/${displayValue(maxCredits)}`;
 }
 
 function ResultsContent() {
@@ -473,6 +487,11 @@ function ResultSubjectCard({
     const status = result.total !== null ? getResultStatus(result.total) : "low";
     const tone = result.total !== null ? getResultTone(status) : "slate";
     const toneClasses = getToneClasses(tone);
+    const credits = displayCourseCredits(
+        course?.credits ?? result.credits,
+        course?.maxCredits
+    );
+    const creditsText = credits === "-" ? "-" : `${credits} credits`;
 
     return (
         <motion.div
@@ -507,7 +526,7 @@ function ResultSubjectCard({
                     </h3>
 
                     <p className="mt-1 text-sm font-semibold text-slate-500">
-                        Grade {displayValue(result.grade)} • {displayValue(result.credits)} credits
+                        Grade {displayValue(result.grade)} • {creditsText}
                     </p>
                 </div>
 

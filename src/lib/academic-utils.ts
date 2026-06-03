@@ -398,7 +398,14 @@ export function getLowestResult(results: ResultItem[]) {
 
 export function getGradeDistribution(results: ResultItem[]) {
     return results.reduce<Record<string, number>>((distribution, item) => {
-        const grade = item.grade?.trim() || "-";
+        const rawGrade = item.grade?.trim() || "";
+        const grade =
+            rawGrade &&
+            !["NA", "N/A", "NULL", "NONE", "TAL", "UNDEFINED"].includes(
+                rawGrade.toUpperCase()
+            )
+                ? rawGrade
+                : "-";
 
         distribution[grade] = (distribution[grade] ?? 0) + 1;
 
