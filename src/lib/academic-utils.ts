@@ -14,9 +14,9 @@ export type ProgressTone = "green" | "orange" | "red";
 export type ResultItem = {
     code: string;
     subject: string;
-    total: number;
-    grade: string;
-    credits?: number;
+    total: number | null;
+    grade: string | null;
+    credits?: number | null;
 };
 
 export type ResultStatus = "excellent" | "good" | "average" | "low";
@@ -370,27 +370,30 @@ export function formatSubjectLabel(subject: AttendanceSubject) {
 /* Result helpers */
 
 export function getAverageResult(results: ResultItem[]) {
-    if (results.length === 0) return 0;
+    const valid = results.filter((item) => item.total !== null) as { total: number }[];
+    if (valid.length === 0) return null;
 
-    const total = results.reduce((sum, item) => sum + item.total, 0);
+    const total = valid.reduce((sum, item) => sum + item.total, 0);
 
-    return Math.round(total / results.length);
+    return Math.round(total / valid.length);
 }
 
 export function getHighestResult(results: ResultItem[]) {
-    if (results.length === 0) return null;
+    const valid = results.filter((item) => item.total !== null) as { total: number }[];
+    if (valid.length === 0) return null;
 
-    return results.reduce((highest, item) =>
+    return valid.reduce((highest, item) =>
         item.total > highest.total ? item : highest
-    );
+    ) as unknown as ResultItem;
 }
 
 export function getLowestResult(results: ResultItem[]) {
-    if (results.length === 0) return null;
+    const valid = results.filter((item) => item.total !== null) as { total: number }[];
+    if (valid.length === 0) return null;
 
-    return results.reduce((lowest, item) =>
+    return valid.reduce((lowest, item) =>
         item.total < lowest.total ? item : lowest
-    );
+    ) as unknown as ResultItem;
 }
 
 export function getGradeDistribution(results: ResultItem[]) {

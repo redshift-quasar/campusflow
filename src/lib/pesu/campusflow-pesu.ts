@@ -75,6 +75,7 @@ export type SafePesuResultCourse = {
 export type SafePesuResults = {
     semester?: number | null;
     description?: string;
+    resultType?: "current" | "released" | "previous" | "unknown";
     earnedCredits?: number | null;
     totalCredits?: number | null;
     sgpa?: number | null;

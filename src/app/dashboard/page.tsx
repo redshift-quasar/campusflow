@@ -306,12 +306,12 @@ export default function DashboardPage() {
                         label="Latest SGPA"
                         value={
                             resultSummary.sgpa !== null
-                                ? resultSummary.sgpa.toString()
-                                : "--"
+                                ? resultSummary.sgpa.toFixed(2)
+                                : "-"
                         }
                         detail={
                             resultSummary.courseCount
-                                ? `Sem ${resultSummary.semester ?? "--"} • ${resultSummary.courseCount} courses`
+                                ? `Sem ${resultSummary.semester ?? "-"} • ${resultSummary.courseCount} courses`
                                 : "Results not synced"
                         }
                         icon={GraduationCap}
@@ -461,11 +461,11 @@ export default function DashboardPage() {
                                 <SideInfoRow
                                     icon={Timer}
                                     label={nextClass?.status === "ongoing" ? "Now" : "Next"}
-                                    value={nextClass?.subject ?? "No class data"}
+                                    value={nextClass?.subject ?? "-"}
                                     detail={
                                         nextClass
                                             ? `${nextClass.time} • ${nextClass.room}`
-                                            : "--"
+                                            : "-"
                                     }
                                     tone="blue"
                                 />
@@ -475,14 +475,14 @@ export default function DashboardPage() {
                                     label="Latest Result"
                                     value={
                                         resultSummary.sgpa !== null
-                                            ? `${resultSummary.sgpa} SGPA`
+                                            ? `${resultSummary.sgpa.toFixed(2)} SGPA`
                                             : resultSummary.bestCourse?.grade
                                                 ? `${resultSummary.bestCourse.grade} best grade`
-                                                : "No result data"
+                                                : "-"
                                     }
                                     detail={
                                         resultSummary.courseCount
-                                            ? `Sem ${resultSummary.semester ?? "--"} • ${resultSummary.courseCount} courses`
+                                            ? `Sem ${resultSummary.semester ?? "-"} • ${resultSummary.courseCount} courses`
                                             : "Results will appear after PESU sync"
                                     }
                                     tone="violet"
@@ -815,6 +815,15 @@ function mapDemoClassToDashboardClass(
     };
 }
 
+function cleanRoom(room?: string | null) {
+    if (!room) return "-";
+    const clean = room.trim();
+    if (/^(room\s+)?(not synced|not assigned|null|undefined|missing|no room assigned)$/i.test(clean) || clean === "-") {
+        return "-";
+    }
+    return clean;
+}
+
 function buildTodayClassPreview(slots: DashboardTimetableSlot[]) {
     const today = new Intl.DateTimeFormat("en-US", {
         weekday: "long",
@@ -836,13 +845,17 @@ function buildTodayClassPreview(slots: DashboardTimetableSlot[]) {
                         ? "upcoming"
                         : "completed";
 
+            const subject = slot.subject || slot.code || "-";
+            const code = slot.code || "-";
+            const time = slot.time || [slot.startTime, slot.endTime].filter(Boolean).join(" - ") || "-";
+
             return {
-                id: slot.id ?? `pesu-${slot.code}-${slot.time}-${index}`,
+                id: slot.id ?? `pesu-${code}-${time}-${index}`,
                 status,
-                subject: slot.subject ?? slot.code ?? "Class",
-                code: slot.code ?? "",
-                time: slot.time ?? [slot.startTime, slot.endTime].filter(Boolean).join(" - "),
-                room: slot.room ?? "Room not synced",
+                subject,
+                code,
+                time,
+                room: cleanRoom(slot.room),
                 day: slot.day ?? today,
             };
         })

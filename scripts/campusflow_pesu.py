@@ -1027,7 +1027,7 @@ def parse_pesu_timetable_script(source: str):
                 "faculty": ", ".join(faculties),
                 "faculties": faculties,
                 "type": class_type,
-                "room": f"Room {room_id}" if room_id else "Room not synced",
+                "room": f"Room {room_id}" if room_id else "-",
                 "roomId": room_id,
                 "templateDetailsId": slot.get("timeTableTemplateDetailsId"),
             }
@@ -1205,6 +1205,24 @@ async def fetch_timetable(pesu: Any):
     return parsed
 
 
+def determine_result_type(parsed, requested_semester):
+    if not parsed.get("courses"):
+        return "unknown"
+    
+    # Check if any course has a grade, or if SGPA/CGPA is present
+    has_grades = any(c.get("grade") for c in parsed.get("courses", []))
+    has_gpa = parsed.get("sgpa") is not None or parsed.get("cgpa") is not None
+    
+    parsed_sem = parsed.get("semester")
+    if parsed_sem and requested_semester and parsed_sem < requested_semester:
+        return "previous"
+        
+    if has_grades or has_gpa:
+        return "released"
+    else:
+        return "current"
+
+
 async def fetch_results(pesu: Any, semester_number: int | None = None):
     html = await fetch_results_html(pesu)
     parsed = parse_pesu_results_html(html)
@@ -1212,6 +1230,7 @@ async def fetch_results(pesu: Any, semester_number: int | None = None):
     html_course_count = len(parsed.get("courses") or [])
 
     if html_course_count > 0:
+        parsed["resultType"] = determine_result_type(parsed, semester_number)
         if os.environ.get("CAMPUSFLOW_DEBUG_PESU") == "1":
             print(
                 json.dumps(
@@ -1235,12 +1254,13 @@ async def fetch_results(pesu: Any, semester_number: int | None = None):
     wrapper_errors = []
     max_semester = semester_number if semester_number and semester_number > 0 else 8
 
-    for semester in range(1, max_semester + 1):
+    for semester in range(max_semester, 0, -1):
         try:
             raw_result = await maybe_await(pesu.get_results(semester))
             normalized = normalize_wrapper_results(raw_result, semester)
 
             if normalized.get("courses"):
+                normalized["resultType"] = determine_result_type(normalized, semester_number)
                 if os.environ.get("CAMPUSFLOW_DEBUG_PESU") == "1":
                     print(
                         json.dumps(
@@ -1279,6 +1299,7 @@ async def fetch_results(pesu: Any, semester_number: int | None = None):
             file=sys.stderr,
         )
 
+    parsed["resultType"] = "unknown"
     return parsed
 
 async def fetch_seating(pesu: Any):

@@ -15,9 +15,9 @@ const PESU_SYNC_EVENT = "campusflow_pesu_sync_changed";
 
 type SemesterDisplay = {
     semester: string;
-    sgpa: number;
-    cgpa: number;
-    credits: number;
+    sgpa: number | null;
+    cgpa: number | null;
+    credits: number | null;
 };
 
 type PesuResultsSnapshot = {
@@ -66,7 +66,7 @@ function getCoursePercent(course: SafePesuResultCourse) {
             assessment.maxMarks > 0
     );
 
-    if (!scoredAssessments.length) return 0;
+    if (!scoredAssessments.length) return null;
 
     const marks = scoredAssessments.reduce(
         (total, assessment) => total + numberOrZero(assessment.marks),
@@ -77,7 +77,7 @@ function getCoursePercent(course: SafePesuResultCourse) {
         0
     );
 
-    if (!maxMarks) return 0;
+    if (!maxMarks) return null;
 
     return Math.round((marks / maxMarks) * 100);
 }
@@ -93,8 +93,8 @@ function createResultsSnapshot(
         code: course.code || `PESU-${index + 1}`,
         subject: course.name || course.code || "Untitled Course",
         total: getCoursePercent(course),
-        grade: course.grade ?? "--",
-        credits: numberOrZero(course.credits),
+        grade: course.grade ?? "-",
+        credits: course.credits ?? null,
     }));
 
     const semesterLabel = results.semester
@@ -102,9 +102,9 @@ function createResultsSnapshot(
         : "PESU Semester";
     const semesterRecord: SemesterDisplay = {
         semester: semesterLabel,
-        sgpa: numberOrZero(results.sgpa),
-        cgpa: numberOrZero(results.cgpa),
-        credits: numberOrZero(results.earnedCredits),
+        sgpa: results.sgpa ?? null,
+        cgpa: results.cgpa ?? null,
+        credits: results.earnedCredits ?? null,
     };
 
     return {

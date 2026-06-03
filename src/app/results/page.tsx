@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, Suspense } from "react";
+import { useEffect, Suspense, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -77,21 +77,30 @@ function ResultsContent() {
     const gradeDistribution = getGradeDistribution(resultItems);
     const latestSemester = semesters.at(-1);
 
+    const badgeText = useMemo(() => {
+        if (source !== "pesu") return "CampusFlow / Demo Results";
+        const type = rawResults?.resultType;
+        if (type === "current") return "Current Semester";
+        if (type === "released") return "Released Result";
+        if (type === "previous") return "Previous Semester";
+        return "Result Status Unknown";
+    }, [source, rawResults]);
+
     return (
         <DashboardShell title="Results" subtitle={`Academic record for ${displayName}`}>
             <div className="main-shine-surface mx-auto max-w-7xl space-y-6 rounded-[2.5rem]">
                 <motion.div variants={sectionMotion} initial="initial" animate="animate">
                     <StudioHero
-                        badge={source === "pesu" ? "CampusFlow / PESU Live" : "CampusFlow / Demo Results"}
+                        badge={badgeText}
                         title="Performance,"
                         mutedTitle="cleanly tracked."
                         description="Your marks, grade distribution, semester record, and strongest subjects are arranged in one premium academic overview."
                     >
                         <ResultHeroCard
                             average={averageResult}
-                            sgpa={latestSemester?.sgpa ?? 0}
-                            cgpa={latestSemester?.cgpa ?? 0}
-                            earnedCredits={rawResults?.earnedCredits ?? latestSemester?.credits}
+                            sgpa={latestSemester?.sgpa ?? null}
+                            cgpa={latestSemester?.cgpa ?? null}
+                            earnedCredits={rawResults?.earnedCredits !== null && rawResults?.earnedCredits !== undefined ? rawResults.earnedCredits : latestSemester?.credits}
                             totalCredits={rawResults?.totalCredits}
                         />
                     </StudioHero>
@@ -124,34 +133,34 @@ function ResultsContent() {
                 >
                     <MetricCard
                         label="Average"
-                        value={`${averageResult}%`}
+                        value={averageResult !== null ? `${averageResult}%` : "-"}
                         detail="Across current subjects"
                         icon={BarChart3}
-                        tone={getResultTone(getResultStatus(averageResult))}
+                        tone={averageResult !== null ? getResultTone(getResultStatus(averageResult)) : "slate"}
                     />
 
                     <MetricCard
                         label="Latest SGPA"
-                        value={latestSemester ? latestSemester.sgpa.toFixed(2) : "--"}
-                        detail={latestSemester?.semester ?? "Semester record"}
+                        value={latestSemester && latestSemester.sgpa !== null ? latestSemester.sgpa.toFixed(2) : "-"}
+                        detail={latestSemester?.semester ?? "-"}
                         icon={GraduationCap}
                         tone="violet"
                     />
 
                     <MetricCard
                         label="Highest"
-                        value={highestResult ? `${highestResult.total}%` : "--"}
-                        detail={highestResult?.subject ?? "No result data"}
+                        value={highestResult && highestResult.total !== null ? `${highestResult.total}%` : "-"}
+                        detail={highestResult?.subject ?? "-"}
                         icon={TrendingUp}
                         tone="green"
                     />
 
                     <MetricCard
                         label="Lowest"
-                        value={lowestResult ? `${lowestResult.total}%` : "--"}
-                        detail={lowestResult?.subject ?? "No result data"}
+                        value={lowestResult && lowestResult.total !== null ? `${lowestResult.total}%` : "-"}
+                        detail={lowestResult?.subject ?? "-"}
                         icon={TrendingDown}
-                        tone={lowestResult ? getResultTone(getResultStatus(lowestResult.total)) : "slate"}
+                        tone={lowestResult && lowestResult.total !== null ? getResultTone(getResultStatus(lowestResult.total)) : "slate"}
                     />
                 </motion.section>
 
@@ -229,7 +238,7 @@ function ResultsContent() {
                                     </p>
 
                                     <h2 className="mt-2 text-2xl font-black tracking-tight">
-                                        {getResultStatusLabel(getResultStatus(averageResult))}
+                                        {averageResult !== null ? getResultStatusLabel(getResultStatus(averageResult)) : "-"}
                                     </h2>
 
                                     <p className="mt-2 text-sm leading-6 text-slate-500">
@@ -239,28 +248,32 @@ function ResultsContent() {
 
                                 <StudioIconBubble
                                     icon={ShieldCheck}
-                                    tone={getResultTone(getResultStatus(averageResult))}
+                                    tone={averageResult !== null ? getResultTone(getResultStatus(averageResult)) : "slate"}
                                 />
                             </div>
 
                             <div className="mt-6">
-                                <StudioProgressBar
-                                    value={averageResult}
-                                    tone={resultToneToProgressTone(
-                                        getResultTone(getResultStatus(averageResult))
-                                    )}
-                                />
+                                {averageResult !== null ? (
+                                    <StudioProgressBar
+                                        value={averageResult}
+                                        tone={resultToneToProgressTone(
+                                            getResultTone(getResultStatus(averageResult))
+                                        )}
+                                    />
+                                ) : (
+                                    <div className="h-2 w-full rounded-full bg-white/[0.06]" />
+                                )}
                             </div>
 
                             <div className="mt-6 grid grid-cols-2 gap-3">
-                                <StudioMini label="Average" value={`${averageResult}%`} />
+                                <StudioMini label="Average" value={averageResult !== null ? `${averageResult}%` : "-"} />
                                 <StudioMini
                                     label="Subjects"
                                     value={String(resultItems.length)}
                                 />
                                 <StudioMini
                                     label="CGPA"
-                                    value={latestSemester ? latestSemester.cgpa.toFixed(2) : "--"}
+                                    value={latestSemester && latestSemester.cgpa !== null ? latestSemester.cgpa.toFixed(2) : "-"}
                                     wide
                                 />
                             </div>
@@ -302,14 +315,14 @@ function ResultsContent() {
                                 <SummaryRow
                                     icon={Trophy}
                                     label="Best Subject"
-                                    value={highestResult?.subject ?? "--"}
+                                    value={highestResult?.subject ?? "-"}
                                     tone="green"
                                 />
 
                                 <SummaryRow
                                     icon={BookOpen}
                                     label="Focus Subject"
-                                    value={lowestResult?.subject ?? "--"}
+                                    value={lowestResult?.subject ?? "-"}
                                     tone="orange"
                                 />
 
@@ -317,11 +330,11 @@ function ResultsContent() {
                                     icon={Award}
                                     label="Credits"
                                     value={
-                                        rawResults?.earnedCredits || rawResults?.totalCredits
-                                            ? `${rawResults.earnedCredits ?? "--"}/${rawResults.totalCredits ?? "--"}`
-                                            : latestSemester
+                                        rawResults?.earnedCredits !== null && rawResults?.earnedCredits !== undefined || rawResults?.totalCredits !== null && rawResults?.totalCredits !== undefined
+                                            ? `${rawResults.earnedCredits ?? "-"}/${rawResults.totalCredits ?? "-"}`
+                                            : latestSemester && latestSemester.credits !== null
                                                 ? `${latestSemester.credits} completed`
-                                            : "--"
+                                            : "-"
                                     }
                                     tone="violet"
                                 />
@@ -358,14 +371,14 @@ function ResultHeroCard({
     earnedCredits,
     totalCredits,
 }: {
-    average: number;
-    sgpa: number;
-    cgpa: number;
+    average: number | null;
+    sgpa: number | null;
+    cgpa: number | null;
     earnedCredits?: number | null;
     totalCredits?: number | null;
 }) {
-    const status = getResultStatus(average);
-    const tone = getResultTone(status);
+    const status = average !== null ? getResultStatus(average) : "low";
+    const tone = average !== null ? getResultTone(status) : "slate";
 
     return (
         <div className="studio-card-soft p-5">
@@ -377,10 +390,10 @@ function ResultHeroCard({
 
                     <div className="mt-4 flex items-end gap-3">
                         <p className="text-6xl font-black tracking-[-0.06em]">
-                            {average}
+                            {average !== null ? average : "-"}
                         </p>
 
-                        <p className="mb-2 text-sm font-semibold text-slate-500">%</p>
+                        {average !== null && <p className="mb-2 text-sm font-semibold text-slate-500">%</p>}
                     </div>
                 </div>
 
@@ -388,25 +401,29 @@ function ResultHeroCard({
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
-                <StudioMini label="SGPA" value={sgpa ? sgpa.toFixed(2) : "--"} />
-                <StudioMini label="CGPA" value={cgpa ? cgpa.toFixed(2) : "--"} />
+                <StudioMini label="SGPA" value={sgpa !== null && sgpa !== undefined ? sgpa.toFixed(2) : "-"} />
+                <StudioMini label="CGPA" value={cgpa !== null && cgpa !== undefined ? cgpa.toFixed(2) : "-"} />
                 <StudioMini
                     label="Credits"
                     value={
-                        earnedCredits || totalCredits
-                            ? `${earnedCredits ?? "--"}/${totalCredits ?? "--"}`
-                            : "--"
+                        earnedCredits !== null && earnedCredits !== undefined || totalCredits !== null && totalCredits !== undefined
+                            ? `${earnedCredits ?? "-"}/${totalCredits ?? "-"}`
+                            : "-"
                     }
                     wide
                 />
             </div>
 
             <div className="mt-5">
-                <StudioProgressBar value={average} tone={resultToneToProgressTone(tone)} />
+                {average !== null ? (
+                    <StudioProgressBar value={average} tone={resultToneToProgressTone(tone)} />
+                ) : (
+                    <div className="h-2 w-full rounded-full bg-white/[0.06]" />
+                )}
             </div>
 
             <p className="mt-3 text-xs leading-5 text-slate-500">
-                Status: {getResultStatusLabel(status)}
+                Status: {average !== null ? getResultStatusLabel(status) : "-"}
             </p>
         </div>
     );
@@ -421,8 +438,8 @@ function ResultSubjectCard({
     course?: SafePesuResultCourse;
     highlighted?: boolean;
 }) {
-    const status = getResultStatus(result.total);
-    const tone = getResultTone(status);
+    const status = result.total !== null ? getResultStatus(result.total) : "low";
+    const tone = result.total !== null ? getResultTone(status) : "slate";
     const toneClasses = getToneClasses(tone);
 
     return (
@@ -450,15 +467,15 @@ function ResultSubjectCard({
             <div className="relative z-10 grid gap-4 md:grid-cols-[minmax(0,1fr)_160px] md:items-center">
                 <div className="min-w-0">
                     <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-600">
-                        {result.code}
+                        {result.code || "-"}
                     </p>
 
                     <h3 className="mt-2 truncate font-black tracking-tight text-white">
-                        {result.subject}
+                        {result.subject || "-"}
                     </h3>
 
                     <p className="mt-1 text-sm font-semibold text-slate-500">
-                        Grade {result.grade} • {result.credits ?? 0} credits
+                        Grade {result.grade || "-"} • {result.credits !== null && result.credits !== undefined ? result.credits : "-"} credits
                     </p>
                 </div>
 
@@ -467,19 +484,23 @@ function ResultSubjectCard({
                         <span
                             className={`rounded-full px-3 py-1 text-xs font-black ${toneClasses.chip}`}
                         >
-                            {getResultStatusLabel(status)}
+                            {result.total !== null ? getResultStatusLabel(status) : "-"}
                         </span>
 
                         <span className="text-xl font-black tracking-[-0.04em] text-white">
-                            {result.total}%
+                            {result.total !== null ? `${result.total}%` : "-"}
                         </span>
                     </div>
 
                     <div className="mt-3">
-                        <StudioProgressBar
-                            value={result.total}
-                            tone={resultToneToProgressTone(tone)}
-                        />
+                        {result.total !== null ? (
+                            <StudioProgressBar
+                                value={result.total}
+                                tone={resultToneToProgressTone(tone)}
+                            />
+                        ) : (
+                            <div className="h-2 w-full rounded-full bg-white/[0.06]" />
+                        )}
                     </div>
                 </div>
             </div>
@@ -492,11 +513,11 @@ function ResultSubjectCard({
                             className="rounded-2xl border border-white/[0.06] bg-white/[0.035] px-3 py-2"
                         >
                             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">
-                                {assessment.name}
+                                {assessment.name || "-"}
                             </p>
 
                             <p className="mt-1 text-sm font-black text-slate-300">
-                                {assessment.marks ?? "--"}
+                                {assessment.marks ?? "-"}
                                 {assessment.maxMarks ? `/${assessment.maxMarks}` : ""}
                             </p>
                         </div>
@@ -512,9 +533,9 @@ function SemesterCard({
 }: {
     semester: {
         semester: string;
-        sgpa: number;
-        cgpa: number;
-        credits: number;
+        sgpa: number | null;
+        cgpa: number | null;
+        credits: number | null;
     };
 }) {
     return (
@@ -526,13 +547,13 @@ function SemesterCard({
 
             <div className="relative z-10">
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-600">
-                    {semester.semester}
+                    {semester.semester || "-"}
                 </p>
 
                 <div className="mt-5 grid grid-cols-3 gap-3">
-                    <MiniResult label="SGPA" value={semester.sgpa.toFixed(2)} />
-                    <MiniResult label="CGPA" value={semester.cgpa.toFixed(2)} />
-                    <MiniResult label="Credits" value={String(semester.credits)} />
+                    <MiniResult label="SGPA" value={semester.sgpa !== null && semester.sgpa !== undefined ? semester.sgpa.toFixed(2) : "-"} />
+                    <MiniResult label="CGPA" value={semester.cgpa !== null && semester.cgpa !== undefined ? semester.cgpa.toFixed(2) : "-"} />
+                    <MiniResult label="Credits" value={semester.credits !== null && semester.credits !== undefined ? String(semester.credits) : "-"} />
                 </div>
             </div>
         </motion.div>

@@ -116,29 +116,39 @@ function mapDemoTimetable(): AppTimetableSlot[] {
 }
 
 function mapPesuSlot(slot: SafePesuTimetableSlot, index: number): AppTimetableSlot {
-    const startTime = slot.startTime || getTimePart(slot.time, "start");
-    const endTime = slot.endTime || getTimePart(slot.time, "end");
-    const subject = normalizeTitle(slot.subject) || "Untitled Class";
+    const startTime = slot.startTime || (slot.time ? getTimePart(slot.time, "start") : "-");
+    const endTime = slot.endTime || (slot.time ? getTimePart(slot.time, "end") : "-");
+    const subject = normalizeTitle(slot.subject) || "-";
+    const code = slot.code || "-";
     const faculties = Array.isArray(slot.faculties)
         ? slot.faculties.map(normalizeTitle).filter(Boolean)
         : [];
     const faculty =
-        normalizeTitle(slot.faculty) || faculties.join(", ") || "Faculty not synced";
+        normalizeTitle(slot.faculty) || faculties.join(", ") || "-";
+
+    let room = slot.room ? slot.room.trim() : "-";
+    if (
+        !room ||
+        room === "-" ||
+        /^(room\s+)?(not synced|not assigned|null|undefined|missing|no room assigned)$/i.test(room)
+    ) {
+        room = "-";
+    }
 
     return {
-        id: slot.id || `pesu-${slot.dayIndex}-${slot.slotOrder}-${slot.code}-${index}`,
+        id: slot.id || `pesu-${slot.dayIndex}-${slot.slotOrder}-${code}-${index}`,
         day: slot.day || `Day ${slot.dayIndex || 1}`,
         dayIndex: Number(slot.dayIndex) || getDayIndex(slot.day),
         slotOrder: Number(slot.slotOrder) || index + 1,
-        time: slot.time || `${startTime} - ${endTime}`,
+        time: slot.time || (startTime !== "-" && endTime !== "-" ? `${startTime} - ${endTime}` : "-"),
         startTime,
         endTime,
-        code: slot.code || "UNKNOWN",
+        code,
         subject,
         faculty,
-        faculties: faculties.length ? faculties : faculty ? [faculty] : [],
-        type: normalizeType(slot.type, subject),
-        room: slot.room || "Room not synced",
+        faculties: faculties.length ? faculties : faculty !== "-" ? [faculty] : [],
+        type: normalizeType(slot.type || "Lecture", subject),
+        room,
     };
 }
 
