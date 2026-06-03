@@ -14,7 +14,6 @@ import {
     LayoutDashboard,
     MapPinned,
     RefreshCw,
-    ShieldCheck,
     Timer,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -81,6 +80,7 @@ type DashboardTimetableSlot = {
     startTime?: string;
     endTime?: string;
     room?: string;
+    roomId?: string | null;
 };
 
 type DashboardResultCourse = {
@@ -144,9 +144,18 @@ export default function DashboardPage() {
         syncAttendance,
     } = usePesuAttendance();
 
-    const timetableSlots = (session.timetable?.slots ?? []) as DashboardTimetableSlot[];
-    const resultCourses = (session.results?.courses ?? []) as DashboardResultCourse[];
-    const seatingItems = (session.seating?.items ?? []) as DashboardSeatingItem[];
+    const timetableSlots = useMemo(
+        () => (session.timetable?.slots ?? []) as DashboardTimetableSlot[],
+        [session.timetable?.slots]
+    );
+    const resultCourses = useMemo(
+        () => (session.results?.courses ?? []) as DashboardResultCourse[],
+        [session.results?.courses]
+    );
+    const seatingItems = useMemo(
+        () => (session.seating?.items ?? []) as DashboardSeatingItem[],
+        [session.seating?.items]
+    );
 
     function handleRefresh() {
         void syncAttendance();
@@ -296,8 +305,8 @@ export default function DashboardPage() {
 
                     <MetricCard
                         label="Next Class"
-                        value={nextClass?.time?.split(" - ")[0] ?? "--"}
-                        detail={nextClass?.subject ?? "No class data"}
+                        value={displayValue(nextClass?.time?.split(" - ")[0])}
+                        detail={displayValue(nextClass?.subject)}
                         icon={Clock3}
                         tone="blue"
                     />
@@ -808,19 +817,43 @@ function mapDemoClassToDashboardClass(
         id: `demo-${item.subject}-${item.time}-${index}`,
         status,
         subject: item.subject,
-        code: "",
+        code: "-",
         time: item.time,
         room: item.room,
         day: "Today",
     };
 }
 
-function cleanRoom(room?: string | null) {
-    if (!room) return "-";
-    const clean = room.trim();
-    if (/^(room\s+)?(not synced|not assigned|null|undefined|missing|no room assigned)$/i.test(clean) || clean === "-") {
+function cleanUnavailableText(value?: string | null) {
+    const clean = String(value ?? "").trim();
+
+    if (
+        !clean ||
+        /^(?:-|n\/a|na|none|null|undefined|missing|not synced|not assigned|room not synced|room not assigned|no room assigned|faculty not synced|no faculty assigned)$/i.test(clean)
+    ) {
+        return "";
+    }
+
+    return clean;
+}
+
+function displayValue(value?: string | number | null) {
+    const clean = cleanUnavailableText(value === undefined || value === null ? "" : String(value));
+
+    return clean || "-";
+}
+
+function cleanRoom(room?: string | null, roomId?: string | null) {
+    const clean = cleanUnavailableText(room);
+
+    if (!clean) {
         return "-";
     }
+
+    if (roomId && clean.toLowerCase() === `room ${roomId}`.toLowerCase()) {
+        return "-";
+    }
+
     return clean;
 }
 
@@ -845,9 +878,17 @@ function buildTodayClassPreview(slots: DashboardTimetableSlot[]) {
                         ? "upcoming"
                         : "completed";
 
-            const subject = slot.subject || slot.code || "-";
-            const code = slot.code || "-";
-            const time = slot.time || [slot.startTime, slot.endTime].filter(Boolean).join(" - ") || "-";
+            const subject = displayValue(
+                cleanUnavailableText(slot.subject) || cleanUnavailableText(slot.code)
+            );
+            const code = displayValue(slot.code);
+            const time = displayValue(
+                cleanUnavailableText(slot.time) ||
+                [slot.startTime, slot.endTime]
+                    .map(cleanUnavailableText)
+                    .filter(Boolean)
+                    .join(" - ")
+            );
 
             return {
                 id: slot.id ?? `pesu-${code}-${time}-${index}`,
@@ -855,7 +896,7 @@ function buildTodayClassPreview(slots: DashboardTimetableSlot[]) {
                 subject,
                 code,
                 time,
-                room: cleanRoom(slot.room),
+                room: cleanRoom(slot.room, slot.roomId),
                 day: slot.day ?? today,
             };
         })

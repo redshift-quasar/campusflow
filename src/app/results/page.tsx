@@ -42,6 +42,44 @@ import {
 
 type Tone = "blue" | "green" | "orange" | "violet" | "red";
 
+function displayValue(value?: string | number | null) {
+    if (value === null || value === undefined) return "-";
+
+    const text = String(value).trim();
+
+    return text ? text : "-";
+}
+
+function displayFixed(value?: number | null) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+
+    return value.toFixed(2);
+}
+
+function displayMarks(marks?: number | null, maxMarks?: number | null) {
+    if (marks === null || marks === undefined) return "-";
+
+    if (maxMarks === null || maxMarks === undefined) {
+        return String(marks);
+    }
+
+    return `${marks}/${maxMarks}`;
+}
+
+function displayCreditPair(
+    earnedCredits?: number | null,
+    totalCredits?: number | null
+) {
+    if (
+        (earnedCredits === null || earnedCredits === undefined) &&
+        (totalCredits === null || totalCredits === undefined)
+    ) {
+        return "-";
+    }
+
+    return `${displayValue(earnedCredits)}/${displayValue(totalCredits)}`;
+}
+
 function ResultsContent() {
     const { user } = useLocalAuth();
     const {
@@ -100,7 +138,7 @@ function ResultsContent() {
                             average={averageResult}
                             sgpa={latestSemester?.sgpa ?? null}
                             cgpa={latestSemester?.cgpa ?? null}
-                            earnedCredits={rawResults?.earnedCredits !== null && rawResults?.earnedCredits !== undefined ? rawResults.earnedCredits : latestSemester?.credits}
+                            earnedCredits={rawResults ? rawResults.earnedCredits : latestSemester?.credits}
                             totalCredits={rawResults?.totalCredits}
                         />
                     </StudioHero>
@@ -141,8 +179,8 @@ function ResultsContent() {
 
                     <MetricCard
                         label="Latest SGPA"
-                        value={latestSemester && latestSemester.sgpa !== null ? latestSemester.sgpa.toFixed(2) : "-"}
-                        detail={latestSemester?.semester ?? "-"}
+                        value={displayFixed(latestSemester?.sgpa)}
+                        detail={displayValue(latestSemester?.semester)}
                         icon={GraduationCap}
                         tone="violet"
                     />
@@ -150,7 +188,7 @@ function ResultsContent() {
                     <MetricCard
                         label="Highest"
                         value={highestResult && highestResult.total !== null ? `${highestResult.total}%` : "-"}
-                        detail={highestResult?.subject ?? "-"}
+                        detail={displayValue(highestResult?.subject)}
                         icon={TrendingUp}
                         tone="green"
                     />
@@ -158,7 +196,7 @@ function ResultsContent() {
                     <MetricCard
                         label="Lowest"
                         value={lowestResult && lowestResult.total !== null ? `${lowestResult.total}%` : "-"}
-                        detail={lowestResult?.subject ?? "-"}
+                        detail={displayValue(lowestResult?.subject)}
                         icon={TrendingDown}
                         tone={lowestResult && lowestResult.total !== null ? getResultTone(getResultStatus(lowestResult.total)) : "slate"}
                     />
@@ -183,14 +221,14 @@ function ResultsContent() {
                                 animate="animate"
                                 className="mt-5 grid gap-3"
                             >
-                                {resultItems.map((result) => {
-                                    const course = resultCourses.find(
+                                {resultItems.map((result, index) => {
+                                    const course = resultCourses[index] ?? resultCourses.find(
                                         (item) => item.code === result.code
                                     );
 
                                     return (
                                         <ResultSubjectCard
-                                            key={result.code}
+                                            key={`${result.code}-${result.subject}-${index}`}
                                             result={result}
                                             course={course}
                                             highlighted={result.code === codeParam}
@@ -273,7 +311,7 @@ function ResultsContent() {
                                 />
                                 <StudioMini
                                     label="CGPA"
-                                    value={latestSemester && latestSemester.cgpa !== null ? latestSemester.cgpa.toFixed(2) : "-"}
+                                    value={displayFixed(latestSemester?.cgpa)}
                                     wide
                                 />
                             </div>
@@ -315,14 +353,14 @@ function ResultsContent() {
                                 <SummaryRow
                                     icon={Trophy}
                                     label="Best Subject"
-                                    value={highestResult?.subject ?? "-"}
+                                    value={displayValue(highestResult?.subject)}
                                     tone="green"
                                 />
 
                                 <SummaryRow
                                     icon={BookOpen}
                                     label="Focus Subject"
-                                    value={lowestResult?.subject ?? "-"}
+                                    value={displayValue(lowestResult?.subject)}
                                     tone="orange"
                                 />
 
@@ -330,11 +368,9 @@ function ResultsContent() {
                                     icon={Award}
                                     label="Credits"
                                     value={
-                                        rawResults?.earnedCredits !== null && rawResults?.earnedCredits !== undefined || rawResults?.totalCredits !== null && rawResults?.totalCredits !== undefined
-                                            ? `${rawResults.earnedCredits ?? "-"}/${rawResults.totalCredits ?? "-"}`
-                                            : latestSemester && latestSemester.credits !== null
-                                                ? `${latestSemester.credits} completed`
-                                            : "-"
+                                        rawResults
+                                            ? displayCreditPair(rawResults.earnedCredits, rawResults.totalCredits)
+                                            : displayValue(latestSemester?.credits)
                                     }
                                     tone="violet"
                                 />
@@ -401,15 +437,11 @@ function ResultHeroCard({
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
-                <StudioMini label="SGPA" value={sgpa !== null && sgpa !== undefined ? sgpa.toFixed(2) : "-"} />
-                <StudioMini label="CGPA" value={cgpa !== null && cgpa !== undefined ? cgpa.toFixed(2) : "-"} />
+                <StudioMini label="SGPA" value={displayFixed(sgpa)} />
+                <StudioMini label="CGPA" value={displayFixed(cgpa)} />
                 <StudioMini
                     label="Credits"
-                    value={
-                        earnedCredits !== null && earnedCredits !== undefined || totalCredits !== null && totalCredits !== undefined
-                            ? `${earnedCredits ?? "-"}/${totalCredits ?? "-"}`
-                            : "-"
-                    }
+                    value={displayCreditPair(earnedCredits, totalCredits)}
                     wide
                 />
             </div>
@@ -467,15 +499,15 @@ function ResultSubjectCard({
             <div className="relative z-10 grid gap-4 md:grid-cols-[minmax(0,1fr)_160px] md:items-center">
                 <div className="min-w-0">
                     <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-600">
-                        {result.code || "-"}
+                        {displayValue(result.code)}
                     </p>
 
                     <h3 className="mt-2 truncate font-black tracking-tight text-white">
-                        {result.subject || "-"}
+                        {displayValue(result.subject)}
                     </h3>
 
                     <p className="mt-1 text-sm font-semibold text-slate-500">
-                        Grade {result.grade || "-"} • {result.credits !== null && result.credits !== undefined ? result.credits : "-"} credits
+                        Grade {displayValue(result.grade)} • {displayValue(result.credits)} credits
                     </p>
                 </div>
 
@@ -507,18 +539,17 @@ function ResultSubjectCard({
 
             {course?.assessments.length ? (
                 <div className="relative z-10 mt-4 grid gap-2 md:grid-cols-2">
-                    {course.assessments.map((assessment) => (
+                    {course.assessments.map((assessment, index) => (
                         <div
-                            key={`${result.code}-${assessment.name}`}
+                            key={`${result.code}-${assessment.name}-${index}`}
                             className="rounded-2xl border border-white/[0.06] bg-white/[0.035] px-3 py-2"
                         >
                             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">
-                                {assessment.name || "-"}
+                                {displayValue(assessment.name)}
                             </p>
 
                             <p className="mt-1 text-sm font-black text-slate-300">
-                                {assessment.marks ?? "-"}
-                                {assessment.maxMarks ? `/${assessment.maxMarks}` : ""}
+                                {displayMarks(assessment.marks, assessment.maxMarks)}
                             </p>
                         </div>
                     ))}
@@ -547,13 +578,13 @@ function SemesterCard({
 
             <div className="relative z-10">
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-600">
-                    {semester.semester || "-"}
+                    {displayValue(semester.semester)}
                 </p>
 
                 <div className="mt-5 grid grid-cols-3 gap-3">
-                    <MiniResult label="SGPA" value={semester.sgpa !== null && semester.sgpa !== undefined ? semester.sgpa.toFixed(2) : "-"} />
-                    <MiniResult label="CGPA" value={semester.cgpa !== null && semester.cgpa !== undefined ? semester.cgpa.toFixed(2) : "-"} />
-                    <MiniResult label="Credits" value={semester.credits !== null && semester.credits !== undefined ? String(semester.credits) : "-"} />
+                    <MiniResult label="SGPA" value={displayFixed(semester.sgpa)} />
+                    <MiniResult label="CGPA" value={displayFixed(semester.cgpa)} />
+                    <MiniResult label="Credits" value={displayValue(semester.credits)} />
                 </div>
             </div>
         </motion.div>
@@ -575,7 +606,7 @@ function GradeDistributionRow({
         <div className="rounded-[1.25rem] border border-white/[0.06] bg-white/[0.035] p-4">
             <div className="flex items-center justify-between gap-3">
                 <div>
-                    <p className="text-sm font-black text-white">Grade {grade}</p>
+                    <p className="text-sm font-black text-white">Grade {displayValue(grade)}</p>
                     <p className="mt-1 text-xs font-semibold text-slate-500">
                         {count} subject{count === 1 ? "" : "s"}
                     </p>

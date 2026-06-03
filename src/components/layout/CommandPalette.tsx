@@ -31,15 +31,15 @@ type SearchPreviewMeta = {
     code?: string;
     name?: string;
     attended?: number;
-    total?: number;
+    total?: number | null;
     percentage?: number;
     faculty?: string;
-    credits?: number;
+    credits?: number | null;
     subject?: string;
     time?: string;
     room?: string;
     day?: string;
-    grade?: string;
+    grade?: string | null;
     exam?: string;
     seat?: string;
     date?: string;

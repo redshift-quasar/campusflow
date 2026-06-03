@@ -89,17 +89,17 @@ function createResultsSnapshot(
 ): PesuResultsSnapshot | null {
     if (!results?.courses.length) return null;
 
-    const mappedResults: ResultItem[] = results.courses.map((course, index) => ({
-        code: course.code || `PESU-${index + 1}`,
-        subject: course.name || course.code || "Untitled Course",
+    const mappedResults: ResultItem[] = results.courses.map((course) => ({
+        code: course.code || "-",
+        subject: course.name || course.code || "-",
         total: getCoursePercent(course),
-        grade: course.grade ?? "-",
+        grade: course.grade ?? null,
         credits: course.credits ?? null,
     }));
 
     const semesterLabel = results.semester
-        ? `Semester ${results.semester}`
-        : "PESU Semester";
+        ? String(results.semester)
+        : "-";
     const semesterRecord: SemesterDisplay = {
         semester: semesterLabel,
         sgpa: results.sgpa ?? null,

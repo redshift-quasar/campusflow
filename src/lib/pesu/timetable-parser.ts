@@ -235,7 +235,7 @@ export function parsePesuTimetableScript(source: string) {
             faculty,
             faculties,
             type,
-            room: roomId ? `Room ${roomId}` : "Room not synced",
+            room: "-",
             roomId,
             templateDetailsId: slot.timeTableTemplateDetailsId,
         });

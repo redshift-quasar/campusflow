@@ -109,6 +109,7 @@ def default_results():
     return {
         "semester": None,
         "description": "",
+        "resultType": "unknown",
         "earnedCredits": None,
         "totalCredits": None,
         "sgpa": None,
@@ -192,7 +193,7 @@ def parse_assessment_block(block: Any):
     grade_node = block.select_one("span.f-size-2x-big")
     grade = get_clean_text(grade_node) or None
 
-    if title.upper() == "ESA" or grade_node is not None:
+    if grade_node is not None:
         return None, grade
 
     mark_node = (
@@ -216,6 +217,13 @@ def parse_assessment_block(block: Any):
         max_marks = to_number_or_none(max_match.group(1))
 
     if marks is None:
+        if title.upper() == "ESA":
+            return {
+                "name": title,
+                "marks": None,
+                "maxMarks": max_marks,
+            }, grade
+
         return None, grade
 
     return {
@@ -538,6 +546,13 @@ def normalize_wrapper_course(raw: Any):
 
             if assessment_name.upper() == "ESA":
                 if assessment.get("marks") is None:
+                    assessments.append(
+                        {
+                            "name": assessment.get("name"),
+                            "marks": None,
+                            "maxMarks": assessment.get("maxMarks"),
+                        }
+                    )
                     continue
 
             assessments.append(
@@ -1027,7 +1042,7 @@ def parse_pesu_timetable_script(source: str):
                 "faculty": ", ".join(faculties),
                 "faculties": faculties,
                 "type": class_type,
-                "room": f"Room {room_id}" if room_id else "-",
+                "room": "-",
                 "roomId": room_id,
                 "templateDetailsId": slot.get("timeTableTemplateDetailsId"),
             }
@@ -1208,19 +1223,26 @@ async def fetch_timetable(pesu: Any):
 def determine_result_type(parsed, requested_semester):
     if not parsed.get("courses"):
         return "unknown"
-    
-    # Check if any course has a grade, or if SGPA/CGPA is present
+
     has_grades = any(c.get("grade") for c in parsed.get("courses", []))
     has_gpa = parsed.get("sgpa") is not None or parsed.get("cgpa") is not None
-    
+    has_assessment_marks = any(
+        assessment.get("marks") is not None
+        for course in parsed.get("courses", [])
+        for assessment in course.get("assessments") or []
+    )
+
     parsed_sem = parsed.get("semester")
     if parsed_sem and requested_semester and parsed_sem < requested_semester:
         return "previous"
-        
+
     if has_grades or has_gpa:
         return "released"
-    else:
+
+    if has_assessment_marks:
         return "current"
+
+    return "unknown"
 
 
 async def fetch_results(pesu: Any, semester_number: int | None = None):

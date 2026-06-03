@@ -41,6 +41,8 @@ export type SlotsByDay = {
 
 const PESU_SYNC_EVENT = "campusflow_pesu_sync_changed";
 const DEFAULT_DAYS = timetableDays;
+const UNAVAILABLE_TEXT_PATTERN =
+    /^(?:-|n\/a|na|none|null|undefined|missing|not synced|not assigned|room not synced|room not assigned|no room assigned|faculty not synced|no faculty assigned)$/i;
 
 function getTimePart(time: string, part: "start" | "end") {
     const [start = "", end = ""] = time.split(" - ");
@@ -71,6 +73,18 @@ function normalizeTitle(value: string) {
             return word.charAt(0).toUpperCase() + word.slice(1);
         })
         .join(" ");
+}
+
+function cleanOptionalText(value?: string | null) {
+    const clean = String(value ?? "").trim();
+
+    if (!clean || UNAVAILABLE_TEXT_PATTERN.test(clean)) return "";
+
+    return clean;
+}
+
+function normalizeDisplayTitle(value?: string | null) {
+    return normalizeTitle(cleanOptionalText(value));
 }
 
 function normalizeType(value: string, subject: string): AppTimetableSlot["type"] {
@@ -106,7 +120,7 @@ function mapDemoTimetable(): AppTimetableSlot[] {
                 endTime,
                 code: slot.code,
                 subject: slot.subject,
-                faculty: slot.faculty || "Faculty not synced",
+                faculty: slot.faculty || "-",
                 faculties: slot.faculty ? [slot.faculty] : [],
                 type: slot.type,
                 room: slot.room,
@@ -115,32 +129,48 @@ function mapDemoTimetable(): AppTimetableSlot[] {
     );
 }
 
+function getPesuRoomValue(slot: SafePesuTimetableSlot) {
+    const room = cleanOptionalText(slot.room);
+
+    if (!room) return "-";
+
+    if (
+        slot.roomId &&
+        room.toLowerCase() === `room ${slot.roomId}`.toLowerCase()
+    ) {
+        return "-";
+    }
+
+    return room;
+}
+
 function mapPesuSlot(slot: SafePesuTimetableSlot, index: number): AppTimetableSlot {
-    const startTime = slot.startTime || (slot.time ? getTimePart(slot.time, "start") : "-");
-    const endTime = slot.endTime || (slot.time ? getTimePart(slot.time, "end") : "-");
-    const subject = normalizeTitle(slot.subject) || "-";
-    const code = slot.code || "-";
+    const startTime =
+        cleanOptionalText(slot.startTime) ||
+        (slot.time ? cleanOptionalText(getTimePart(slot.time, "start")) : "") ||
+        "-";
+    const endTime =
+        cleanOptionalText(slot.endTime) ||
+        (slot.time ? cleanOptionalText(getTimePart(slot.time, "end")) : "") ||
+        "-";
+    const subject = normalizeDisplayTitle(slot.subject) || "-";
+    const code = cleanOptionalText(slot.code) || "-";
     const faculties = Array.isArray(slot.faculties)
-        ? slot.faculties.map(normalizeTitle).filter(Boolean)
+        ? slot.faculties.map(normalizeDisplayTitle).filter(Boolean)
         : [];
     const faculty =
-        normalizeTitle(slot.faculty) || faculties.join(", ") || "-";
-
-    let room = slot.room ? slot.room.trim() : "-";
-    if (
-        !room ||
-        room === "-" ||
-        /^(room\s+)?(not synced|not assigned|null|undefined|missing|no room assigned)$/i.test(room)
-    ) {
-        room = "-";
-    }
+        normalizeDisplayTitle(slot.faculty) || faculties.join(", ") || "-";
+    const time =
+        cleanOptionalText(slot.time) ||
+        (startTime !== "-" && endTime !== "-" ? `${startTime} - ${endTime}` : "-");
+    const room = getPesuRoomValue(slot);
 
     return {
         id: slot.id || `pesu-${slot.dayIndex}-${slot.slotOrder}-${code}-${index}`,
-        day: slot.day || `Day ${slot.dayIndex || 1}`,
+        day: cleanOptionalText(slot.day) || `Day ${slot.dayIndex || 1}`,
         dayIndex: Number(slot.dayIndex) || getDayIndex(slot.day),
         slotOrder: Number(slot.slotOrder) || index + 1,
-        time: slot.time || (startTime !== "-" && endTime !== "-" ? `${startTime} - ${endTime}` : "-"),
+        time,
         startTime,
         endTime,
         code,

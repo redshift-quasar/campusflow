@@ -128,8 +128,8 @@ export default function TodayPage() {
                             </p>
 
                             <div className="mt-5 grid grid-cols-2 gap-3">
-                                <StudioMini label="Code" value={currentClass?.code ?? "--"} />
-                                <StudioMini label="Type" value={currentClass?.type ?? "--"} />
+                                <StudioMini label="Code" value={currentClass?.code ?? "-"} />
+                                <StudioMini label="Type" value={currentClass?.type ?? "-"} />
                                 <StudioMini
                                     label={source === "pesu" ? "PESU Live" : "Source"}
                                     value={
@@ -140,7 +140,7 @@ export default function TodayPage() {
                                 />
                                 <StudioMini
                                     label="Faculty"
-                                    value={currentClass?.faculty ?? "--"}
+                                    value={currentClass?.faculty ?? "-"}
                                     wide
                                 />
                             </div>
@@ -298,15 +298,15 @@ export default function TodayPage() {
                                             value={
                                                 currentClass
                                                     ? `${currentClass.time} • ${currentClass.duration}`
-                                                    : "--"
+                                                    : "-"
                                             }
                                         />
-                                        <InfoRow label="Room" value={currentClass?.room ?? "--"} />
+                                        <InfoRow label="Room" value={currentClass?.room ?? "-"} />
                                         <InfoRow
                                             label="Faculty"
-                                            value={currentClass?.faculty ?? "--"}
+                                            value={currentClass?.faculty ?? "-"}
                                         />
-                                        <InfoRow label="Type" value={currentClass?.type ?? "--"} />
+                                        <InfoRow label="Type" value={currentClass?.type ?? "-"} />
                                         <InfoRow label="Source" value={sourceLabel} />
                                         {source === "pesu" && lastFinalizedAt && (
                                             <InfoRow
@@ -336,11 +336,11 @@ export default function TodayPage() {
                                     <OverviewItem label="Academic load" value={academicLoad} />
                                     <OverviewItem
                                         label="First class"
-                                        value={firstClass?.startTime ?? "--"}
+                                        value={firstClass?.startTime ?? "-"}
                                     />
                                     <OverviewItem
                                         label="Last class"
-                                        value={lastClass?.endTime ?? "--"}
+                                        value={lastClass?.endTime ?? "-"}
                                     />
                                     <OverviewItem label="Labs today" value={String(labCount)} />
                                     <OverviewItem label="Source" value={sourceLabel} />

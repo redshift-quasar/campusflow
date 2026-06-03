@@ -99,7 +99,7 @@ function TimetableContent() {
 
     const firstClass = selectedClasses[0];
     const lastClass = selectedClasses[selectedClasses.length - 1];
-    const lastClassEndTime = lastClass ? getSlotEndTime(lastClass) : "--";
+    const lastClassEndTime = lastClass ? getSlotEndTime(lastClass) : "-";
 
     return (
         <DashboardShell
@@ -132,7 +132,7 @@ function TimetableContent() {
                                 <StudioMini label="Labs" value={String(labCount)} />
                                 <StudioMini
                                     label="First Class"
-                                    value={firstClass?.startTime ?? "--"}
+                                    value={firstClass?.startTime ?? "-"}
                                     wide
                                 />
                                 <StudioMini
@@ -309,7 +309,7 @@ function TimetableContent() {
                                 <InfoRow label="Total classes" value={String(totalClasses)} />
                                 <InfoRow label="Lectures" value={String(lectureCount)} />
                                 <InfoRow label="Labs" value={String(labCount)} />
-                                <InfoRow label="First class" value={firstClass?.startTime ?? "--"} />
+                                <InfoRow label="First class" value={firstClass?.startTime ?? "-"} />
                                 <InfoRow label="Last class" value={lastClassEndTime} />
                                 <InfoRow
                                     label="Source"
@@ -491,11 +491,11 @@ function TimetableRow({
 }
 
 function getSlotEndTime(slot: AppTimetableSlot) {
-    return slot.endTime || slot.time.split(" - ")[1] || slot.time;
+    return slot.endTime || slot.time.split(" - ")[1] || slot.time || "-";
 }
 
 function getSlotStartTime(slot: AppTimetableSlot) {
-    return slot.startTime || slot.time.split(" - ")[0] || slot.time;
+    return slot.startTime || slot.time.split(" - ")[0] || slot.time || "-";
 }
 
 function RoomItem({
