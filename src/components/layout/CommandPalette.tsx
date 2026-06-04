@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 import { navItems } from "@/components/layout/nav-items";
-import { normalizeSearch } from "@/lib/academic-utils";
+import { getAttendancePercent, normalizeSearch } from "@/lib/academic-utils";
 import { attendanceSubjects } from "@/lib/demo-data";
 import { usePesuAttendance } from "@/lib/hooks/use-pesu-attendance";
 import { usePesuResults } from "@/lib/hooks/use-pesu-results";
@@ -119,7 +119,7 @@ export function CommandPalette({
         }));
 
         const subjectItems = searchableAttendanceSubjects.map((subject) => {
-            const pct = subject.total > 0 ? Math.round((subject.attended / subject.total) * 100) : 0;
+            const pct = getAttendancePercent(subject);
             return {
                 title: subject.name,
                 subtitle: `${subject.code} • Attendance • ${subject.faculty ?? "Faculty not synced"}`,

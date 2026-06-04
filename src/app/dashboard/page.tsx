@@ -165,11 +165,13 @@ export default function DashboardPage() {
     const attendanceSummary = useMemo(() => {
         const average =
             subjects.length > 0
-                ? Math.round(
-                    subjects.reduce(
-                        (sum, subject) => sum + getAttendancePercent(subject),
-                        0
-                    ) / subjects.length
+                ? Number(
+                    (
+                        subjects.reduce(
+                            (sum, subject) => sum + getAttendancePercent(subject),
+                            0
+                        ) / subjects.length
+                    ).toFixed(2)
                 )
                 : 0;
 

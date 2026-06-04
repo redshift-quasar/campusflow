@@ -813,6 +813,28 @@ def choose_latest_semester_key(raw_data: dict[str, Any]):
     return str(max(numeric_keys))
 
 
+def normalize_attendance_count(value: Any):
+    number = to_number_or_none(value)
+
+    if number is None:
+        return 0
+
+    return max(0, number)
+
+
+def calculate_attendance_percentage(attended: Any, total: Any):
+    attended_count = normalize_attendance_count(attended)
+    total_count = normalize_attendance_count(total)
+
+    if total_count <= 0:
+        return 0
+
+    percentage = (attended_count / total_count) * 100
+    clamped_percentage = min(100, max(0, percentage))
+
+    return round(clamped_percentage, 2)
+
+
 def numeric_text(value: Any):
     text = clean_text(value)
 
@@ -1132,13 +1154,16 @@ def normalize_attendance(raw_attendance: dict[str, Any], semester_number: int | 
         if not isinstance(attendance, dict):
             attendance = {}
 
+        attended = normalize_attendance_count(attendance.get("attended"))
+        total = normalize_attendance_count(attendance.get("total"))
+
         normalized.append(
             {
                 "code": subject.get("code") or "",
                 "name": subject.get("title") or subject.get("name") or "",
-                "attended": attendance.get("attended") or 0,
-                "total": attendance.get("total") or 0,
-                "percentage": attendance.get("percentage") or 0,
+                "attended": attended,
+                "total": total,
+                "percentage": calculate_attendance_percentage(attended, total),
                 "id": subject.get("id"),
             }
         )

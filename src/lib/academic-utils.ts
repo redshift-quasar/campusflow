@@ -85,15 +85,11 @@ export function getAttendancePercent(subject: AttendanceSubject) {
 
     const percent = (subject.attended / subject.total) * 100;
 
-    return Math.round(clampNumber(percent, 0, 100));
+    return Number(clampNumber(percent, 0, 100).toFixed(2));
 }
 
 export function getExactAttendancePercent(subject: AttendanceSubject) {
-    if (!subject.total || subject.total <= 0) return 0;
-
-    const percent = (subject.attended / subject.total) * 100;
-
-    return Number(clampNumber(percent, 0, 100).toFixed(2));
+    return getAttendancePercent(subject);
 }
 
 export function getAttendanceTone(
