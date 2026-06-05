@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
@@ -35,6 +35,7 @@ type SearchPreviewMeta = {
     percentage?: number;
     faculty?: string;
     credits?: number | null;
+    maxCredits?: number | null;
     subject?: string;
     time?: string;
     room?: string;
@@ -66,6 +67,41 @@ function withQueryParam(baseHref: string, key: string, value?: string | null) {
     return `${baseHref}?${key}=${encodeURIComponent(cleanValue)}`;
 }
 
+function normalizeCourseCode(value?: string | null) {
+    return String(value ?? "").trim().toUpperCase();
+}
+
+function isUsefulSyncValue(value?: string | null): value is string {
+    const clean = String(value ?? "").trim();
+
+    if (!clean) return false;
+
+    return !/^(?:-|n\/a|na|none|null|undefined|missing|not synced|not assigned|faculty not synced|no faculty assigned)$/i.test(clean);
+}
+
+function uniqueValues(values: string[]) {
+    const seen = new Set<string>();
+
+    return values
+        .map((value) => value.trim())
+        .filter((value) => {
+            const key = value.toLowerCase();
+
+            if (seen.has(key)) return false;
+
+            seen.add(key);
+            return true;
+        });
+}
+
+function formatCreditValue(value?: number | null) {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+        return "Not synced";
+    }
+
+    return `${value} credit${value === 1 ? "" : "s"}`;
+}
+
 export function CommandPalette({
     onClose,
     pathname,
@@ -76,7 +112,7 @@ export function CommandPalette({
     const router = useRouter();
     const { subjects: syncedSubjects } = usePesuAttendance();
     const { slots: timetableSlots, todaySlots } = usePesuTimetable();
-    const { results: resultItems } = usePesuResults();
+    const { results: resultItems, courses: resultCourses } = usePesuResults();
     const { seating: seatingRecords } = usePesuSeating();
 
     const searchableAttendanceSubjects =
@@ -88,6 +124,7 @@ export function CommandPalette({
 
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
     const scrollAnimationRef = useRef<number | null>(null);
+    const searchInputRef = useRef<HTMLInputElement | null>(null);
     const target = useSettingsStore((state) => state.attendanceTarget);
 
     const categories = [
@@ -100,6 +137,48 @@ export function CommandPalette({
     ];
 
     const commandItems = useMemo<SearchPreviewItem[]>(() => {
+        const facultyByCode = new Map<string, string>();
+        const creditsByCode = new Map<
+            string,
+            { credits?: number | null; maxCredits?: number | null }
+        >();
+
+        timetableSlots.forEach((slot) => {
+            const code = normalizeCourseCode(slot.code);
+            const facultyNames = [
+                ...(slot.faculties ?? []),
+                slot.faculty,
+            ].filter(isUsefulSyncValue);
+
+            if (!code || facultyByCode.has(code) || facultyNames.length === 0) {
+                return;
+            }
+
+            facultyByCode.set(code, uniqueValues(facultyNames).join(", "));
+        });
+
+        resultCourses.forEach((course) => {
+            const code = normalizeCourseCode(course.code);
+
+            if (!code) return;
+
+            creditsByCode.set(code, {
+                credits: course.credits,
+                maxCredits: course.maxCredits,
+            });
+        });
+
+        resultItems.forEach((item) => {
+            const code = normalizeCourseCode(item.code);
+
+            if (!code || creditsByCode.has(code)) return;
+
+            creditsByCode.set(code, {
+                credits: item.credits,
+                maxCredits: item.credits,
+            });
+        });
+
         const pageItems = navItems.map((item) => ({
             title: item.label,
             subtitle: item.href,
@@ -120,13 +199,25 @@ export function CommandPalette({
 
         const subjectItems = searchableAttendanceSubjects.map((subject) => {
             const pct = getAttendancePercent(subject);
+            const code = normalizeCourseCode(subject.code);
+            const faculty =
+                facultyByCode.get(code) ||
+                (isUsefulSyncValue(subject.faculty) ? subject.faculty : "") ||
+                "Faculty not synced";
+            const syncedCredits = creditsByCode.get(code);
+            const maxCredits =
+                syncedCredits?.maxCredits ??
+                syncedCredits?.credits ??
+                subject.credits ??
+                null;
+
             return {
                 title: subject.name,
-                subtitle: `${subject.code} • Attendance • ${subject.faculty ?? "Faculty not synced"}`,
+                subtitle: `${subject.code} • Attendance • ${faculty}`,
                 href: withQueryParam("/attendance", "subject", subject.code),
                 icon: BarChart3,
                 group: "Subjects",
-                keywords: `${subject.name} ${subject.code} ${subject.faculty ?? ""} attendance`,
+                keywords: `${subject.name} ${subject.code} ${faculty} attendance`,
                 meta: {
                     type: "subject",
                     code: subject.code,
@@ -134,8 +225,9 @@ export function CommandPalette({
                     attended: subject.attended,
                     total: subject.total,
                     percentage: pct,
-                    faculty: subject.faculty,
-                    credits: subject.credits
+                    faculty,
+                    credits: maxCredits,
+                    maxCredits,
                 }
             };
         });
@@ -221,6 +313,7 @@ export function CommandPalette({
             ...seatingItems,
         ];
     }, [
+        resultCourses,
         resultItems,
         searchableAttendanceSubjects,
         seatingRecords,
@@ -311,6 +404,14 @@ export function CommandPalette({
     }, []);
 
     useEffect(() => {
+        const timeout = window.setTimeout(() => {
+            searchInputRef.current?.focus();
+        }, 0);
+
+        return () => window.clearTimeout(timeout);
+    }, []);
+
+    useEffect(() => {
         const container = scrollContainerRef.current;
         if (!container) return;
 
@@ -377,7 +478,7 @@ export function CommandPalette({
         router.push(href);
     }
 
-    function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    function handlePaletteKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
         if (event.key === "Tab") {
             event.preventDefault();
             const dir = event.shiftKey ? -1 : 1;
@@ -393,9 +494,12 @@ export function CommandPalette({
 
             if (filteredItems.length === 0) return;
 
-            setActiveIndex((current) =>
-                current >= filteredItems.length - 1 ? 0 : current + 1
-            );
+            setActiveIndex((current) => {
+                const lastIndex = filteredItems.length - 1;
+                const safeCurrent = Math.min(Math.max(current, 0), lastIndex);
+
+                return safeCurrent >= lastIndex ? 0 : safeCurrent + 1;
+            });
 
             return;
         }
@@ -405,9 +509,12 @@ export function CommandPalette({
 
             if (filteredItems.length === 0) return;
 
-            setActiveIndex((current) =>
-                current <= 0 ? filteredItems.length - 1 : current - 1
-            );
+            setActiveIndex((current) => {
+                const lastIndex = filteredItems.length - 1;
+                const safeCurrent = Math.min(Math.max(current, 0), lastIndex);
+
+                return safeCurrent <= 0 ? lastIndex : safeCurrent - 1;
+            });
 
             return;
         }
@@ -430,7 +537,7 @@ export function CommandPalette({
             return;
         }
 
-        if (event.key === "Enter") {
+        if (event.key === "Enter" && event.target === searchInputRef.current) {
             event.preventDefault();
 
             const selectedItem = filteredItems[activeSearchIndex];
@@ -454,6 +561,7 @@ export function CommandPalette({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] flex items-start justify-center bg-black/65 px-4 pt-16 backdrop-blur-md sm:pt-20"
+            onKeyDown={handlePaletteKeyDown}
         >
             <motion.div
                 initial={{ opacity: 0, y: 18, scale: 0.97 }}
@@ -475,12 +583,12 @@ export function CommandPalette({
 
                         <input
                             autoFocus
+                            ref={searchInputRef}
                             value={query}
                             onChange={(event) => {
                                 setQuery(event.target.value);
                                 setActiveIndex(0);
                             }}
-                            onKeyDown={handleInputKeyDown}
                             placeholder="Search pages, subjects, rooms, marks, exams..."
                             className="w-full bg-transparent text-sm font-semibold text-white outline-none placeholder:text-slate-600"
                         />
@@ -786,7 +894,9 @@ function SearchPreviewPanel({
                                 </div>
                                 <div className="flex items-center justify-between text-xs">
                                     <span className="font-semibold text-slate-400">Credits</span>
-                                    <span className="font-medium text-white">{meta.credits} credits</span>
+                                    <span className="font-medium text-white">
+                                        {formatCreditValue(meta.maxCredits ?? meta.credits)}
+                                    </span>
                                 </div>
                                 <div className="flex items-center justify-between text-xs">
                                     <span className="font-semibold text-slate-400">Status</span>
