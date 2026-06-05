@@ -408,13 +408,24 @@ export default function SettingsPage() {
                             </div>
 
                             <div className="studio-card-soft mt-6 p-5">
-                                <InfoRow label="Frontend" value="No PESU password storage" />
-                                <InfoRow label="Backend" value="Route handlers" />
-                                <InfoRow label="Session" value="HTTP-only cookie" />
-                                <InfoRow
-                                    label="Status"
-                                    value={session.connected ? "Active" : "Offline"}
-                                />
+                                <div className="divide-y divide-white/[0.07] overflow-hidden rounded-[1.35rem] border border-white/[0.06] bg-black/10">
+                                    <PrivacyDataRow
+                                        label="Frontend"
+                                        value="No PESU password storage"
+                                    />
+                                    <PrivacyDataRow
+                                        label="Backend"
+                                        value="Route handlers"
+                                    />
+                                    <PrivacyDataRow
+                                        label="Session"
+                                        value="HTTP-only cookie"
+                                    />
+                                    <PrivacyDataRow
+                                        label="Status"
+                                        value={session.connected ? "Active" : "Offline"}
+                                    />
+                                </div>
                             </div>
                         </motion.section>
 
@@ -650,6 +661,24 @@ function MetricMotionCard({ children }: { children: ReactNode }) {
         <motion.div variants={cardMotion} className="smooth-card">
             {children}
         </motion.div>
+    );
+}
+
+function PrivacyDataRow({
+    label,
+    value,
+}: {
+    label: string;
+    value: string;
+}) {
+    return (
+        <div className="flex items-center justify-between gap-4 px-4 py-3">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-600">
+                {label}
+            </p>
+
+            <p className="text-right text-sm font-black text-slate-300">{value}</p>
+        </div>
     );
 }
 
