@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { clearPesuSyncCache } from "@/lib/pesu/campusflow-pesu";
+import { PESU_LOGIN_FAILURE_MESSAGE } from "@/lib/pesu/safe-errors";
 import { notifyPesuSyncChanged } from "@/lib/hooks/use-pesu-attendance";
 import BorderGlow from "@/components/ui/BorderGlow";
 import {
@@ -139,7 +140,7 @@ export default function HomePage() {
       const data = (await response.json()) as PesuLoginResponse;
 
       if (!response.ok || !data.connected) {
-        throw new Error(data.message || "Could not login with PESU Academy.");
+        throw new Error(PESU_LOGIN_FAILURE_MESSAGE);
       }
 
       const localUser = createLocalUser({
@@ -153,13 +154,8 @@ export default function HomePage() {
       setPassword("");
 
       router.push(nextPath);
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Could not login with PESU Academy.";
-
-      setLoginError(message);
+    } catch {
+      setLoginError(PESU_LOGIN_FAILURE_MESSAGE);
     } finally {
       setLoginLoading(false);
     }

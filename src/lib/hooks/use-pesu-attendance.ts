@@ -18,6 +18,7 @@ import {
     mapPesuCoursesToAttendanceFallback,
     PESU_SYNC_CACHE_KEY,
 } from "@/lib/pesu/campusflow-pesu";
+import { PESU_ATTENDANCE_FAILURE_MESSAGE } from "@/lib/pesu/safe-errors";
 
 export type PesuLoadState = "loading" | "ready" | "error";
 export type PesuDataSource = "demo" | "pesu";
@@ -157,9 +158,7 @@ export function usePesuAttendance() {
             const data = (await response.json()) as PesuAttendanceApiResponse;
 
             if (!response.ok) {
-                throw new Error(
-                    data.error || data.message || "Could not refresh PESU attendance."
-                );
+                throw new Error(PESU_ATTENDANCE_FAILURE_MESSAGE);
             }
 
             if (!Array.isArray(data.subjects)) {
@@ -176,16 +175,11 @@ export function usePesuAttendance() {
                 message: data.message ?? "",
                 error: data.errors?.attendance ?? "",
             });
-        } catch (error) {
-            const message =
-                error instanceof Error
-                    ? error.message
-                    : "Could not refresh PESU attendance.";
-
+        } catch {
             setServerState((current) => ({
                 ...(current ?? getSnapshot()),
                 loadState: "error",
-                error: message,
+                error: PESU_ATTENDANCE_FAILURE_MESSAGE,
             }));
         }
     }, []);

@@ -12,6 +12,10 @@ import {
     type SafePesuSyncResponse,
     type SafePesuTimetable,
 } from "@/lib/pesu/campusflow-pesu";
+import {
+    PESU_LOGIN_FAILURE_MESSAGE,
+    PESU_MISSING_CREDENTIALS_MESSAGE,
+} from "@/lib/pesu/safe-errors";
 
 const PESU_SESSION_EVENT = "campusflow_pesu_session_changed";
 
@@ -91,7 +95,7 @@ export function usePesuSession() {
             const data = (await response.json()) as PesuSessionApiResponse;
 
             if (!response.ok) {
-                throw new Error(data.message || "Could not load PESU session");
+                throw new Error("Could not load PESU session");
             }
 
             setSession(normalizeSessionResponse(data));
@@ -109,6 +113,11 @@ export function usePesuSession() {
             setIsSubmitting(true);
             setError("");
 
+            if (!srn.trim() || !password.trim()) {
+                setError(PESU_MISSING_CREDENTIALS_MESSAGE);
+                return;
+            }
+
             const response = await fetch("/api/pesu/login", {
                 method: "POST",
                 headers: {
@@ -123,18 +132,14 @@ export function usePesuSession() {
             const data = (await response.json()) as PesuSessionApiResponse;
 
             if (!response.ok || !data.connected) {
-                throw new Error(data.message || "Login failed");
+                throw new Error(PESU_LOGIN_FAILURE_MESSAGE);
             }
 
             setSession(normalizeSessionResponse(data));
             clearPesuSyncCache();
             notifyPesuSessionChanged();
-        } catch (connectError) {
-            setError(
-                connectError instanceof Error
-                    ? connectError.message
-                    : "Could not connect PESUAcademy. Check SRN/password."
-            );
+        } catch {
+            setError(PESU_LOGIN_FAILURE_MESSAGE);
         } finally {
             setIsSubmitting(false);
         }

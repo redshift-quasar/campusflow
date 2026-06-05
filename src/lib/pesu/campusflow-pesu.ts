@@ -1,4 +1,5 @@
 import type { AttendanceSubject } from "@/lib/academic-utils";
+import { PESU_SYNC_FAILURE_MESSAGE } from "@/lib/pesu/safe-errors";
 
 export const PESU_SYNC_CACHE_KEY = "campusflow_safe_pesu_sync";
 const PESU_SYNC_EVENT = "campusflow_pesu_sync_changed";
@@ -213,9 +214,7 @@ export async function syncPesuData({
     };
 
     if (!response.ok || !data.ok) {
-        throw new Error(
-            "error" in data && data.error ? data.error : "PESU sync failed."
-        );
+        throw new Error(PESU_SYNC_FAILURE_MESSAGE);
     }
 
     return data;

@@ -15,12 +15,11 @@ type InspectMode = "login" | "attendance" | "calendar";
 
 type InspectorResult = {
     ok: boolean;
-    status?: number;
-    statusText?: string;
     mode?: InspectMode;
     endpointConfigured?: boolean;
+    bodyType?: string;
+    bodySize?: number;
     topLevelKeys?: string[];
-    redactedPreview?: unknown;
     message?: string;
 };
 
@@ -234,8 +233,8 @@ export default function PesuInspectPage() {
                                 <div className="grid gap-3 md:grid-cols-3">
                                     <InfoBox label="OK" value={String(result.ok)} />
                                     <InfoBox
-                                        label="Status"
-                                        value={result.status ? String(result.status) : "-"}
+                                        label="Body"
+                                        value={result.bodyType ?? "-"}
                                     />
                                     <InfoBox label="Mode" value={result.mode ?? "-"} />
                                 </div>
@@ -263,9 +262,12 @@ export default function PesuInspectPage() {
                                     </div>
                                 )}
 
-                                <pre className="max-h-[520px] overflow-auto rounded-[1.5rem] border border-white/[0.07] bg-black/30 p-4 text-xs leading-6 text-slate-300">
-                                    {JSON.stringify(result.redactedPreview ?? result, null, 2)}
-                                </pre>
+                                <div className="rounded-[1.5rem] border border-white/[0.07] bg-black/30 p-4 text-xs font-bold text-slate-400">
+                                    Response body hidden
+                                    {typeof result.bodySize === "number"
+                                        ? ` (${result.bodySize} bytes)`
+                                        : ""}
+                                </div>
                             </div>
                         )}
                     </motion.section>

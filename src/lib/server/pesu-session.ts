@@ -10,6 +10,7 @@ import type {
     SafePesuSyncResponse,
     SafePesuTimetable,
 } from "@/lib/pesu/campusflow-pesu";
+import { sanitizePesuSyncErrors } from "@/lib/pesu/safe-errors";
 
 export const PESU_SESSION_COOKIE = "campusflow_pesu_session";
 export const PESU_SRN_COOKIE = "campusflow_pesu_srn";
@@ -57,14 +58,22 @@ function getSrnFromData(data: SafePesuSyncResponse) {
     return data.profile.srn ?? data.profile.pesuId ?? "PESU";
 }
 
+function sanitizePesuSessionData(data: SafePesuSyncResponse): SafePesuSyncResponse {
+    return {
+        ...data,
+        errors: sanitizePesuSyncErrors(data.errors),
+    };
+}
+
 export function createPesuSession(data: SafePesuSyncResponse) {
     const sessionId = crypto.randomUUID();
-    const srn = getSrnFromData(data);
+    const safeData = sanitizePesuSessionData(data);
+    const srn = getSrnFromData(safeData);
 
     const record: PesuSessionRecord = {
         sessionId,
         srn,
-        data,
+        data: safeData,
         expiresAt: Date.now() + SESSION_MAX_AGE_SECONDS * 1000,
     };
 
@@ -118,20 +127,22 @@ export function toPesuSessionResponse(
         };
     }
 
+    const safeData = sanitizePesuSessionData(session.data);
+
     return {
         connected: true,
         srn: session.srn,
         connectorMode: "pesu",
-        source: session.data.source,
-        syncedAt: session.data.syncedAt,
-        profile: session.data.profile,
-        attendance: session.data.attendance,
-        courses: session.data.courses,
-        timetable: session.data.timetable,
-        results: session.data.results,
-        seating: session.data.seating ?? { items: [] },
-        errors: session.data.errors,
-        data: session.data,
+        source: safeData.source,
+        syncedAt: safeData.syncedAt,
+        profile: safeData.profile,
+        attendance: safeData.attendance,
+        courses: safeData.courses,
+        timetable: safeData.timetable,
+        results: safeData.results,
+        seating: safeData.seating ?? { items: [] },
+        errors: safeData.errors,
+        data: safeData,
     };
 }
 
@@ -169,20 +180,22 @@ export async function getPesuSession(): Promise<PesuSessionSnapshot> {
         };
     }
 
+    const safeData = sanitizePesuSessionData(record.data);
+
     return {
         connected: true,
         sessionId,
         srn: record.srn,
         connectorMode: "pesu",
-        source: record.data.source,
-        syncedAt: record.data.syncedAt,
-        profile: record.data.profile,
-        attendance: record.data.attendance,
-        courses: record.data.courses,
-        timetable: record.data.timetable,
-        results: record.data.results,
-        seating: record.data.seating ?? { items: [] },
-        errors: record.data.errors,
-        data: record.data,
+        source: safeData.source,
+        syncedAt: safeData.syncedAt,
+        profile: safeData.profile,
+        attendance: safeData.attendance,
+        courses: safeData.courses,
+        timetable: safeData.timetable,
+        results: safeData.results,
+        seating: safeData.seating ?? { items: [] },
+        errors: safeData.errors,
+        data: safeData,
     };
 }

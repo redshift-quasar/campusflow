@@ -89,7 +89,7 @@ async function fetchTextFromCalendarDocument(
             });
 
             if (!response.ok) {
-                failures.push(`${candidate.label}: HTTP ${response.status}`);
+                failures.push(`${candidate.label}: unavailable response`);
                 continue;
             }
 
@@ -106,20 +106,15 @@ async function fetchTextFromCalendarDocument(
                 ok: true,
                 text,
             };
-        } catch (error) {
-            failures.push(
-                `${candidate.label}: ${error instanceof Error ? error.message : "fetch failed"
-                }`
-            );
+        } catch {
+            failures.push(`${candidate.label}: fetch failed`);
         }
     }
 
     return {
         ok: false,
         text: "",
-        message: `Could not fetch ${document.title}. Tried: ${failures.join(
-            " | "
-        )}`,
+        message: `Could not fetch ${document.title}. Tried: ${failures.join(" | ")}`,
     };
 }
 
@@ -139,7 +134,8 @@ async function fetchCalendarPageDocuments(): Promise<CalendarPageDocumentsResult
         if (!response.ok) {
             return {
                 documents: FALLBACK_CALENDAR_DOCUMENTS,
-                warning: `PES calendar page returned HTTP ${response.status}; using known official calendar document links as fallback.`,
+                warning:
+                    "PES calendar page was unavailable; using known official calendar document links as fallback.",
             };
         }
 
@@ -155,13 +151,11 @@ async function fetchCalendarPageDocuments(): Promise<CalendarPageDocumentsResult
         }
 
         return { documents };
-    } catch (error) {
+    } catch {
         return {
             documents: FALLBACK_CALENDAR_DOCUMENTS,
             warning:
-                error instanceof Error
-                    ? `PES calendar page fetch failed: ${error.message}; using known official calendar document links as fallback.`
-                    : "PES calendar page fetch failed; using known official calendar document links as fallback.",
+                "PES calendar page fetch failed; using known official calendar document links as fallback.",
         };
     }
 }
@@ -275,7 +269,7 @@ export async function fetchPESPublicAcademicCalendar(
                 .filter(Boolean)
                 .join(" "),
         };
-    } catch (error) {
+    } catch {
         return {
             ok: false,
             source: "pes-public-calendar",
@@ -286,10 +280,7 @@ export async function fetchPESPublicAcademicCalendar(
             endDate: "",
             documents: FALLBACK_CALENDAR_DOCUMENTS,
             events: [],
-            message:
-                error instanceof Error
-                    ? error.message
-                    : "Could not fetch PES academic calendar.",
+            message: "Could not fetch PES academic calendar.",
         };
     }
 }

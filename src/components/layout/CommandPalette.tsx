@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
@@ -100,6 +100,20 @@ function formatCreditValue(value?: number | null) {
     }
 
     return `${value} credit${value === 1 ? "" : "s"}`;
+}
+
+function PaletteKey({
+    children,
+    className = "",
+}: {
+    children: ReactNode;
+    className?: string;
+}) {
+    return (
+        <kbd className={`command-palette-key ${className}`}>
+            {children}
+        </kbd>
+    );
 }
 
 export function CommandPalette({
@@ -560,8 +574,13 @@ export function CommandPalette({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-start justify-center bg-black/65 px-4 pt-16 backdrop-blur-md sm:pt-20"
+            className="fixed inset-0 z-[100] flex items-start justify-center bg-black/86 px-4 pt-16 backdrop-blur-xl sm:pt-20"
             onKeyDown={handlePaletteKeyDown}
+            onMouseDown={(event) => {
+                if (event.target === event.currentTarget) {
+                    handleClose();
+                }
+            }}
         >
             <motion.div
                 initial={{ opacity: 0, y: 18, scale: 0.97 }}
@@ -571,199 +590,203 @@ export function CommandPalette({
                     duration: 0.32,
                     ease: [0.16, 1, 0.3, 1],
                 }}
-                className="w-full max-w-4xl overflow-hidden rounded-[2.5rem] border border-white/[0.08] bg-[#080d1d]/90 shadow-2xl shadow-black/60 backdrop-blur-3xl"
+                className="command-palette-frost-shell w-full max-w-4xl rounded-[2.5rem]"
             >
-                <div className="relative border-b border-white/[0.08]">
-                    <div className="absolute left-6 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full bg-sky-300/10 blur-2xl" />
+                <div className="command-palette-frost-content">
+                    <div className="relative border-b border-blue-200/[0.08]">
+                        <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-blue-300/20 to-transparent" />
 
-                    <div className="relative flex items-center gap-3 px-5 py-4">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.045] text-slate-400">
-                            <Search size={18} />
+                        <div className="relative flex items-center gap-3 px-5 py-4">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-blue-200/[0.08] bg-blue-300/[0.035] text-blue-100/70">
+                                <Search size={18} />
+                            </div>
+
+                            <input
+                                autoFocus
+                                ref={searchInputRef}
+                                value={query}
+                                onChange={(event) => {
+                                    setQuery(event.target.value);
+                                    setActiveIndex(0);
+                                }}
+                                placeholder="Search pages, subjects, rooms, marks, exams..."
+                                className="w-full bg-transparent text-sm font-semibold text-white outline-none placeholder:text-slate-600"
+                            />
+
+                            <button
+                                onClick={handleClose}
+                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-blue-200/[0.08] bg-blue-300/[0.035] text-slate-400 transition hover:border-blue-200/[0.16] hover:bg-blue-300/[0.075] hover:text-white"
+                            >
+                                <X size={15} />
+                            </button>
                         </div>
 
-                        <input
-                            autoFocus
-                            ref={searchInputRef}
-                            value={query}
-                            onChange={(event) => {
-                                setQuery(event.target.value);
-                                setActiveIndex(0);
-                            }}
-                            placeholder="Search pages, subjects, rooms, marks, exams..."
-                            className="w-full bg-transparent text-sm font-semibold text-white outline-none placeholder:text-slate-600"
-                        />
-
-                        <button
-                            onClick={handleClose}
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.05] text-slate-400 transition hover:bg-white/[0.1] hover:text-white"
-                        >
-                            <X size={15} />
-                        </button>
+                        <div className="flex items-center gap-1.5 overflow-x-auto px-5 pb-3 pt-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                            {categories.map((cat) => {
+                                const active = selectedCategory === cat.id;
+                                return (
+                                    <button
+                                        key={cat.id}
+                                        onClick={() => {
+                                            setSelectedCategory(cat.id);
+                                            setActiveIndex(0);
+                                        }}
+                                        className={`rounded-full px-3.5 py-1.5 text-xs font-black tracking-tight transition duration-200 ${active
+                                            ? "border border-blue-300/20 bg-blue-300/[0.095] text-blue-50 shadow-[0_0_18px_rgba(96,165,250,0.1)]"
+                                            : "border border-blue-200/[0.055] bg-blue-300/[0.022] text-slate-400 hover:border-blue-200/[0.12] hover:bg-blue-300/[0.055] hover:text-white"
+                                            }`}
+                                    >
+                                        {cat.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 overflow-x-auto px-5 pb-3 pt-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
-                        {categories.map((cat) => {
-                            const active = selectedCategory === cat.id;
-                            return (
-                                <button
-                                    key={cat.id}
-                                    onClick={() => {
-                                        setSelectedCategory(cat.id);
-                                        setActiveIndex(0);
-                                    }}
-                                    className={`rounded-full px-3.5 py-1.5 text-xs font-black tracking-tight transition duration-200 ${active
-                                        ? "bg-white text-slate-950 shadow-md shadow-white/5"
-                                        : "border border-white/[0.05] bg-white/[0.02] text-slate-400 hover:bg-white/[0.05] hover:text-white"
-                                        }`}
-                                >
-                                    {cat.label}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
+                    <div className="grid md:grid-cols-12">
+                        <div className="col-span-12 flex flex-col border-r-0 border-blue-200/[0.08] md:col-span-7 md:border-r">
+                            <div ref={scrollContainerRef} className="max-h-[460px] overflow-y-auto p-3" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(96,165,250,0.12) transparent" }}>
+                                {filteredItems.length > 0 ? (
+                                    <div className="space-y-5">
+                                        {groupedItems.map((group) => (
+                                            <div key={group.group}>
+                                                <div className="mb-2 px-2">
+                                                    <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-600">
+                                                        {group.group}
+                                                    </p>
+                                                </div>
 
-                <div className="grid md:grid-cols-12">
-                    <div className="col-span-12 flex flex-col border-r-0 border-white/[0.08] md:col-span-7 md:border-r">
-                        <div ref={scrollContainerRef} className="max-h-[460px] overflow-y-auto p-3" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.08) transparent" }}>
-                            {filteredItems.length > 0 ? (
-                                <div className="space-y-5">
-                                    {groupedItems.map((group) => (
-                                        <div key={group.group}>
-                                            <div className="mb-2 px-2">
-                                                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-600">
-                                                    {group.group}
-                                                </p>
-                                            </div>
+                                                <div className="space-y-1">
+                                                    {group.items.map(({ item, index }) => {
+                                                        const basePath = item.href.split("?")[0];
+                                                        const currentPage =
+                                                            pathname === basePath ||
+                                                            pathname.startsWith(`${basePath}/`);
 
-                                            <div className="space-y-1">
-                                                {group.items.map(({ item, index }) => {
-                                                    const basePath = item.href.split("?")[0];
-                                                    const currentPage =
-                                                        pathname === basePath ||
-                                                        pathname.startsWith(`${basePath}/`);
+                                                        const keyboardActive = index === activeSearchIndex;
 
-                                                    const keyboardActive = index === activeSearchIndex;
+                                                        const Icon = item.icon;
 
-                                                    const Icon = item.icon;
-
-                                                    return (
-                                                        <motion.div
-                                                            key={`${item.group}-${item.title}-${index}`}
-                                                            data-search-index={index}
-                                                            initial={{ opacity: 0, y: 8 }}
-                                                            animate={{ opacity: 1, y: 0 }}
-                                                            transition={{
-                                                                delay: index * 0.018,
-                                                                duration: 0.22,
-                                                            }}
-                                                            className="relative"
-                                                        >
-                                                            <Link
-                                                                href={item.href}
-                                                                onClick={handleClose}
-                                                                onMouseEnter={() => setActiveIndex(index)}
-                                                                className="group relative flex items-center justify-between rounded-2xl px-4 py-3 transition-colors duration-200"
+                                                        return (
+                                                            <motion.div
+                                                                key={`${item.group}-${item.title}-${index}`}
+                                                                data-search-index={index}
+                                                                initial={{ opacity: 0, y: 8 }}
+                                                                animate={{ opacity: 1, y: 0 }}
+                                                                transition={{
+                                                                    delay: index * 0.018,
+                                                                    duration: 0.22,
+                                                                }}
+                                                                className="relative"
                                                             >
-                                                                {keyboardActive && (
-                                                                    <motion.div
-                                                                        layoutId="search-active-bg"
-                                                                        className="absolute inset-0 rounded-2xl bg-white shadow-lg shadow-white/10"
-                                                                        transition={{
-                                                                            type: "spring",
-                                                                            stiffness: 380,
-                                                                            damping: 30
-                                                                        }}
-                                                                    />
-                                                                )}
+                                                                <Link
+                                                                    href={item.href}
+                                                                    onClick={handleClose}
+                                                                    onMouseEnter={() => setActiveIndex(index)}
+                                                                    className="group relative flex items-center justify-between rounded-2xl px-4 py-3 transition-colors duration-200"
+                                                                >
+                                                                    {keyboardActive && (
+                                                                        <motion.div
+                                                                            layoutId="search-active-bg"
+                                                                            className="absolute inset-0 rounded-2xl border border-blue-300/[0.16] bg-blue-300/[0.075] shadow-[0_0_24px_rgba(96,165,250,0.1)]"
+                                                                            transition={{
+                                                                                type: "spring",
+                                                                                stiffness: 380,
+                                                                                damping: 30
+                                                                            }}
+                                                                        />
+                                                                    )}
 
-                                                                {!keyboardActive && currentPage && (
-                                                                    <div className="absolute left-1.5 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-white/40" />
-                                                                )}
+                                                                    {!keyboardActive && currentPage && (
+                                                                        <div className="absolute left-1.5 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-blue-300/55" />
+                                                                    )}
 
-                                                                <span className="relative z-10 flex min-w-0 items-center gap-3">
-                                                                    <span
-                                                                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border transition duration-200 ${keyboardActive
-                                                                            ? "border-slate-950/10 bg-slate-950/5 text-slate-950"
-                                                                            : "border-white/[0.08] bg-white/[0.045] text-slate-300 group-hover:bg-[#ffffff0e]"
-                                                                            }`}
-                                                                    >
-                                                                        <Icon size={18} />
-                                                                    </span>
-
-                                                                    <span className="min-w-0">
-                                                                        <span className={`block truncate text-sm font-black transition-colors duration-200 ${keyboardActive ? "text-slate-950" : "text-white"}`}>
-                                                                            {item.title}
-                                                                        </span>
-
+                                                                    <span className="relative z-10 flex min-w-0 items-center gap-3">
                                                                         <span
-                                                                            className={`mt-1 block truncate text-xs transition-colors duration-200 ${keyboardActive
-                                                                                ? "text-slate-600"
-                                                                                : "text-slate-500"
+                                                                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border transition duration-200 ${keyboardActive
+                                                                                ? "border-blue-300/[0.18] bg-blue-300/[0.08] text-blue-50"
+                                                                                : "border-blue-200/[0.07] bg-blue-300/[0.025] text-slate-300 group-hover:bg-blue-300/[0.05]"
                                                                                 }`}
                                                                         >
-                                                                            {item.subtitle}
+                                                                            <Icon size={18} />
+                                                                        </span>
+
+                                                                        <span className="min-w-0">
+                                                                            <span className="block truncate text-sm font-black text-white transition-colors duration-200">
+                                                                                {item.title}
+                                                                            </span>
+
+                                                                            <span
+                                                                                className={`mt-1 block truncate text-xs transition-colors duration-200 ${keyboardActive
+                                                                                    ? "text-slate-300"
+                                                                                    : "text-slate-500"
+                                                                                    }`}
+                                                                            >
+                                                                                {item.subtitle}
+                                                                            </span>
                                                                         </span>
                                                                     </span>
-                                                                </span>
 
-                                                                {keyboardActive && (
-                                                                    <span className="relative z-10 ml-3 shrink-0 text-slate-400">
-                                                                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                                            <path d="M6 3L10.5 8L6 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                                                        </svg>
-                                                                    </span>
-                                                                )}
-                                                            </Link>
-                                                        </motion.div>
-                                                    );
-                                                })}
+                                                                    {keyboardActive && (
+                                                                        <span className="relative z-10 ml-3 shrink-0 text-slate-300">
+                                                                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                                                <path d="M6 3L10.5 8L6 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                                                            </svg>
+                                                                        </span>
+                                                                    )}
+                                                                </Link>
+                                                            </motion.div>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="px-4 py-14 text-center">
-                                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.045] text-slate-500">
-                                        <Search size={22} />
+                                        ))}
                                     </div>
+                                ) : (
+                                    <div className="px-4 py-14 text-center">
+                                        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-200/[0.08] bg-blue-300/[0.035] text-slate-500">
+                                            <Search size={22} />
+                                        </div>
 
-                                    <p className="text-sm font-black text-slate-300">
-                                        No result found
-                                    </p>
+                                        <p className="text-sm font-black text-slate-300">
+                                            No result found
+                                        </p>
 
-                                    <p className="mt-2 text-xs leading-5 text-slate-600">
-                                        Try Data Structures, A-312, ISA-2, Attendance, Results, or a
-                                        subject code.
-                                    </p>
-                                </div>
-                            )}
+                                        <p className="mt-2 text-xs leading-5 text-slate-600">
+                                            Try Data Structures, A-312, ISA-2, Attendance, Results, or a
+                                            subject code.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="hidden max-h-[460px] overflow-hidden bg-black/15 md:col-span-5 md:block">
+                            <SearchPreviewPanel item={filteredItems[activeSearchIndex]} target={target} />
                         </div>
                     </div>
 
-                    <div className="hidden max-h-[460px] overflow-hidden bg-white/[0.01] md:col-span-5 md:block">
-                        <SearchPreviewPanel item={filteredItems[activeSearchIndex]} target={target} />
+                    <div className="command-palette-help flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-blue-200/[0.08] px-5 py-3 text-[11px] font-semibold text-slate-500">
+                        <span className="flex items-center gap-1.5">
+                            <span className="flex items-center gap-1">
+                                <PaletteKey>↑</PaletteKey>
+                                <PaletteKey>↓</PaletteKey>
+                            </span>
+                            <span>Navigate</span>
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                            <PaletteKey className="command-palette-key-wide">Tab</PaletteKey>
+                            <span>Switch categories</span>
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                            <PaletteKey className="command-palette-key-enter">Enter ↵</PaletteKey>
+                            <span>Open</span>
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                            <PaletteKey className="command-palette-key-wide">Esc</PaletteKey>
+                            <span>Close</span>
+                        </span>
                     </div>
-                </div>
-
-                <div className="flex items-center gap-4 border-t border-white/[0.08] px-5 py-3 text-[11px] text-slate-500">
-                    <span className="flex items-center gap-1.5">
-                        <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.04] px-1 font-mono text-[10px] text-slate-400">↑</kbd>
-                        <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.04] px-1 font-mono text-[10px] text-slate-400">↓</kbd>
-                        <span className="ml-0.5">Navigate</span>
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                        <kbd className="inline-flex h-5 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.04] px-1.5 font-mono text-[10px] text-slate-400">Tab</kbd>
-                        <span>Switch Categories</span>
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                        <kbd className="inline-flex h-5 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.04] px-1.5 font-mono text-[10px] text-slate-400">↵</kbd>
-                        <span>Open</span>
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                        <kbd className="inline-flex h-5 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.04] px-1.5 font-mono text-[10px] text-slate-400">esc</kbd>
-                        <span>Close</span>
-                    </span>
                 </div>
             </motion.div>
         </motion.div>
@@ -793,23 +816,12 @@ function SearchPreviewPanel({
     const isResult = group === "Results";
     const isSeating = group === "Exam Seating";
 
-    let colorTheme = "sky";
-    if (isPage) colorTheme = "violet";
-    else if (isSubject) colorTheme = (meta?.percentage ?? 0) >= target ? "emerald" : "rose";
-    else if (isSchedule) colorTheme = "sky";
-    else if (isResult) colorTheme = "indigo";
-    else if (isSeating) colorTheme = "amber";
-
-    const colorClasses: Record<string, { border: string; text: string; bg: string; glow: string }> = {
-        sky: { border: "border-sky-500/20", text: "text-sky-400", bg: "bg-sky-500/5", glow: "shadow-sky-500/10" },
-        violet: { border: "border-violet-500/20", text: "text-violet-400", bg: "bg-violet-500/5", glow: "shadow-violet-500/10" },
-        emerald: { border: "border-emerald-500/20", text: "text-emerald-400", bg: "bg-emerald-500/5", glow: "shadow-emerald-500/10" },
-        rose: { border: "border-rose-500/20", text: "text-rose-400", bg: "bg-rose-500/5", glow: "shadow-rose-500/10" },
-        indigo: { border: "border-indigo-500/20", text: "text-indigo-400", bg: "bg-indigo-500/5", glow: "shadow-indigo-500/10" },
-        amber: { border: "border-amber-500/20", text: "text-amber-400", bg: "bg-amber-500/5", glow: "shadow-amber-500/10" },
+    const activeTheme = {
+        border: "border-blue-200/[0.08]",
+        text: "text-blue-100/80",
+        bg: "bg-blue-300/[0.035]",
+        glow: "shadow-black/0",
     };
-
-    const activeTheme = colorClasses[colorTheme] || colorClasses.sky;
 
     let attendanceText = "";
     let attendanceStatus = "";
@@ -851,7 +863,7 @@ function SearchPreviewPanel({
                     </div>
                 </div>
 
-                <div className="h-[1px] w-full bg-white/[0.06]" />
+                <div className="h-[1px] w-full bg-blue-300/[0.08]" />
 
                 <div className="space-y-4">
                     {isPage && (
@@ -859,9 +871,9 @@ function SearchPreviewPanel({
                             <p className="text-sm leading-6 text-slate-400">
                                 {meta?.description}
                             </p>
-                            <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 text-xs text-slate-500">
+                            <div className="rounded-xl border border-blue-200/[0.06] bg-blue-300/[0.022] p-3 text-xs text-slate-500">
                                 <span className="mb-1 block font-semibold text-slate-400">Path</span>
-                                <code className="block truncate text-violet-300">{subtitle}</code>
+                                <code className="block truncate text-slate-300">{subtitle}</code>
                             </div>
                         </div>
                     )}
@@ -869,13 +881,13 @@ function SearchPreviewPanel({
                     {isSubject && meta && (
                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-3">
-                                <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3">
+                                <div className="rounded-xl border border-blue-200/[0.06] bg-blue-300/[0.022] p-3">
                                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Attendance</span>
-                                    <p className={`mt-0.5 text-2xl font-black ${colorTheme === "emerald" ? "text-emerald-400" : "text-rose-400"}`}>
+                                    <p className="mt-0.5 text-2xl font-black text-blue-200">
                                         {meta.percentage}%
                                     </p>
                                 </div>
-                                <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3">
+                                <div className="rounded-xl border border-blue-200/[0.06] bg-blue-300/[0.022] p-3">
                                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Classes</span>
                                     <p className="mt-0.5 text-2xl font-black text-white">
                                         {meta.attended}/{meta.total}
@@ -900,7 +912,7 @@ function SearchPreviewPanel({
                                 </div>
                                 <div className="flex items-center justify-between text-xs">
                                     <span className="font-semibold text-slate-400">Status</span>
-                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${colorTheme === "emerald" ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : "border border-rose-500/20 bg-rose-500/10 text-rose-400"}`}>
+                                    <span className="rounded-full border border-blue-300/20 bg-blue-300/[0.08] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-blue-100">
                                         {attendanceStatus}
                                     </span>
                                 </div>
@@ -914,7 +926,7 @@ function SearchPreviewPanel({
 
                     {isSchedule && meta && (
                         <div className="space-y-3">
-                            <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3">
+                            <div className="rounded-xl border border-blue-200/[0.06] bg-blue-300/[0.022] p-3">
                                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Timing</span>
                                 <p className="mt-0.5 text-lg font-black text-white">
                                     {meta.time}
@@ -945,13 +957,13 @@ function SearchPreviewPanel({
                     {isResult && meta && (
                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-3">
-                                <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3">
+                                <div className="rounded-xl border border-blue-200/[0.06] bg-blue-300/[0.022] p-3">
                                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Grade</span>
-                                    <p className="mt-0.5 text-2xl font-black text-indigo-400">
+                                    <p className="mt-0.5 text-2xl font-black text-white">
                                         {meta.grade}
                                     </p>
                                 </div>
-                                <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3">
+                                <div className="rounded-xl border border-blue-200/[0.06] bg-blue-300/[0.022] p-3">
                                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Marks</span>
                                     <p className="mt-0.5 text-2xl font-black text-white">
                                         {meta.total}%
@@ -975,13 +987,13 @@ function SearchPreviewPanel({
                     {isSeating && meta && (
                         <div className="space-y-3">
                             <div className="grid grid-cols-2 gap-3">
-                                <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3">
+                                <div className="rounded-xl border border-blue-200/[0.06] bg-blue-300/[0.022] p-3">
                                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Room / Hall</span>
-                                    <p className="mt-0.5 truncate text-lg font-black text-amber-400">
+                                    <p className="mt-0.5 truncate text-lg font-black text-white">
                                         {meta.room}
                                     </p>
                                 </div>
-                                <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3">
+                                <div className="rounded-xl border border-blue-200/[0.06] bg-blue-300/[0.022] p-3">
                                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Terminal / Seat</span>
                                     <p className="mt-0.5 truncate text-lg font-black text-white">
                                         {meta.seat}
@@ -1012,10 +1024,10 @@ function SearchPreviewPanel({
                 </div>
             </div>
 
-            <div className="mt-auto flex items-center justify-between rounded-xl border border-white/[0.04] bg-white/[0.015] p-3 text-[10px] font-semibold text-slate-500">
+            <div className="mt-auto flex items-center justify-between rounded-xl border border-blue-200/[0.06] bg-blue-300/[0.022] p-3 text-[10px] font-semibold text-slate-500">
                 <span>Navigate using arrows</span>
                 <span className="flex items-center gap-1">
-                    Press <kbd className="inline-flex h-4 items-center justify-center rounded bg-white/10 px-1 font-mono text-[9px] text-white">↵ Enter</kbd> to view
+                    Press <kbd className="inline-flex h-4 items-center justify-center rounded bg-blue-300/[0.08] px-1 font-mono text-[9px] text-blue-50">↵ Enter</kbd> to view
                 </span>
             </div>
         </div>

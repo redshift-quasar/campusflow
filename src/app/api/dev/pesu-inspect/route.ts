@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { redactSensitiveData, getTopLevelKeys } from "@/lib/server/redact";
+import { getTopLevelKeys } from "@/lib/server/redact";
 
 type InspectMode = "login" | "attendance" | "calendar";
 
@@ -13,6 +13,20 @@ function getEndpoint(mode: InspectMode) {
     if (mode === "login") return process.env.PESU_LOGIN_ENDPOINT;
     if (mode === "attendance") return process.env.PESU_ATTENDANCE_ENDPOINT;
     return process.env.PESU_CALENDAR_ENDPOINT;
+}
+
+function getBodyType(contentType: string, rawData: unknown) {
+    if (contentType.includes("application/json")) {
+        return Array.isArray(rawData) ? "json array" : "json object";
+    }
+
+    return "non-json";
+}
+
+function getBodySize(rawData: unknown) {
+    if (typeof rawData === "string") return rawData.length;
+
+    return JSON.stringify(rawData ?? "").length;
 }
 
 export async function POST(request: Request) {
@@ -88,21 +102,20 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
             ok: response.ok,
-            status: response.status,
-            statusText: response.statusText,
             mode,
             endpointConfigured: true,
+            bodyType: getBodyType(contentType, rawData),
+            bodySize: getBodySize(rawData),
             topLevelKeys: getTopLevelKeys(rawData),
-            redactedPreview: redactSensitiveData(rawData),
+            message: response.ok
+                ? undefined
+                : "Inspector request failed. Check the configured endpoint or credentials.",
         });
-    } catch (error) {
+    } catch {
         return NextResponse.json(
             {
                 ok: false,
-                message:
-                    error instanceof Error
-                        ? error.message
-                        : "Unknown inspector error",
+                message: "Could not run inspector.",
             },
             {
                 status: 500,

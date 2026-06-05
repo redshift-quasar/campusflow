@@ -2,6 +2,10 @@ import "server-only";
 
 import { spawn } from "node:child_process";
 import type { SafePesuSyncResponse } from "@/lib/pesu/campusflow-pesu";
+import {
+    PESU_SYNC_FAILURE_MESSAGE,
+    sanitizePesuSyncErrors,
+} from "@/lib/pesu/safe-errors";
 
 type PesuSyncInput = {
     username: string;
@@ -55,15 +59,11 @@ function toSafePesuSyncResponse(
         results: data.results,
         seating: data.seating ?? { items: [] },
         calendar: data.calendar,
-        errors: {
+        errors: sanitizePesuSyncErrors({
             ...data.errors,
             seating: data.errors?.seating ?? null,
-        },
+        }),
     };
-
-    if ("calendarProbe" in data) {
-        result.calendarProbe = data.calendarProbe;
-    }
 
     return result;
 }
@@ -84,18 +84,15 @@ export function runCampusFlowPesuSync({
         });
 
         let stdout = "";
-        let stderr = "";
 
         child.stdout.on("data", (chunk) => {
             stdout += chunk.toString();
         });
 
-        child.stderr.on("data", (chunk) => {
-            stderr += chunk.toString();
-        });
+        child.stderr.resume();
 
-        child.on("error", (error) => {
-            reject(error);
+        child.on("error", () => {
+            reject(new Error(PESU_SYNC_FAILURE_MESSAGE));
         });
 
         child.on("close", (code) => {
@@ -103,31 +100,13 @@ export function runCampusFlowPesuSync({
                 const parsed = JSON.parse(stdout || "{}") as unknown;
 
                 if (code !== 0 || !isSafePesuSyncResponse(parsed)) {
-                    const parsedError =
-                        isRecord(parsed) && typeof parsed.error === "string"
-                            ? parsed.error
-                            : null;
-
-                    reject(
-                        new Error(
-                            parsedError ||
-                            stderr ||
-                            stdout ||
-                            `CampusFlow PESU sync failed with code ${code}`
-                        )
-                    );
+                    reject(new Error(PESU_SYNC_FAILURE_MESSAGE));
                     return;
                 }
 
                 resolve(toSafePesuSyncResponse(parsed));
             } catch {
-                reject(
-                    new Error(
-                        stderr ||
-                        stdout ||
-                        "CampusFlow PESU sync failed because response was not valid JSON."
-                    )
-                );
+                reject(new Error(PESU_SYNC_FAILURE_MESSAGE));
             }
         });
 

@@ -5,6 +5,10 @@ import {
     setPesuSessionCookies,
     toPesuSessionResponse,
 } from "@/lib/server/pesu-session";
+import {
+    PESU_LOGIN_FAILURE_MESSAGE,
+    PESU_MISSING_CREDENTIALS_MESSAGE,
+} from "@/lib/pesu/safe-errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +33,7 @@ export async function POST(request: Request) {
             return NextResponse.json(
                 {
                     connected: false,
-                    message: "SRN/username and password are required.",
+                    message: PESU_MISSING_CREDENTIALS_MESSAGE,
                 },
                 {
                     status: 400,
@@ -66,14 +70,11 @@ export async function POST(request: Request) {
         setPesuSessionCookies(response, record);
 
         return response;
-    } catch (error) {
+    } catch {
         return NextResponse.json(
             {
                 connected: false,
-                message:
-                    error instanceof Error
-                        ? error.message
-                        : "Could not connect PESUAcademy account.",
+                message: PESU_LOGIN_FAILURE_MESSAGE,
             },
             {
                 status: 401,

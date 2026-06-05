@@ -20,8 +20,8 @@ async function readJsonResponse(response: Response) {
     const contentType = response.headers.get("content-type") ?? "";
 
     if (!contentType.includes("application/json")) {
-        const text = await response.text();
-        throw new Error(`Expected JSON response. Got: ${text.slice(0, 160)}`);
+        await response.arrayBuffer();
+        throw new Error("Expected JSON response from PESUAcademy.");
     }
 
     return response.json() as Promise<unknown>;

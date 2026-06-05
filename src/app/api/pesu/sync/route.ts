@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { runCampusFlowPesuSync } from "@/lib/server/pesu-safe-sync";
+import {
+    PESU_MISSING_CREDENTIALS_MESSAGE,
+    PESU_SYNC_FAILURE_MESSAGE,
+} from "@/lib/pesu/safe-errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +28,7 @@ export async function POST(request: Request) {
             return NextResponse.json(
                 {
                     ok: false,
-                    error: "SRN/username and password are required.",
+                    error: PESU_MISSING_CREDENTIALS_MESSAGE,
                 },
                 {
                     status: 400,
@@ -40,12 +44,11 @@ export async function POST(request: Request) {
         });
 
         return NextResponse.json(result);
-    } catch (error) {
+    } catch {
         return NextResponse.json(
             {
                 ok: false,
-                error:
-                    error instanceof Error ? error.message : "Unable to sync PESU data.",
+                error: PESU_SYNC_FAILURE_MESSAGE,
             },
             {
                 status: 500,

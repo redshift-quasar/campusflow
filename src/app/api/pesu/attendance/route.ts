@@ -4,6 +4,7 @@ import {
     mapPesuAttendanceToSubjects,
     mapPesuCoursesToAttendanceFallback,
 } from "@/lib/pesu/campusflow-pesu";
+import { PESU_ATTENDANCE_FAILURE_MESSAGE } from "@/lib/pesu/safe-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -49,13 +50,10 @@ export async function GET() {
             })),
             errors: session.data.errors,
         });
-    } catch (error) {
+    } catch {
         return NextResponse.json(
             {
-                error:
-                    error instanceof Error
-                        ? error.message
-                        : "Could not fetch PESU attendance.",
+                error: PESU_ATTENDANCE_FAILURE_MESSAGE,
             },
             {
                 status: 500,

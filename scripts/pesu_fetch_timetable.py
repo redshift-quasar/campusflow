@@ -2,7 +2,6 @@ import asyncio
 import inspect
 import json
 import sys
-import traceback
 from typing import Any
 
 from pesuacademy import PESUAcademy
@@ -55,7 +54,6 @@ async def safe_call(name: str, fn):
         return {
             "ok": False,
             "error": str(error),
-            "trace": traceback.format_exc(limit=3),
         }
 
 
@@ -106,12 +104,6 @@ async def main():
                 {
                     "ok": False,
                     "error": str(error),
-                    "trace": traceback.format_exc(limit=6),
-                    "classMethods": [
-                        method
-                        for method in dir(PESUAcademy)
-                        if not method.startswith("_")
-                    ],
                 }
             )
         )
