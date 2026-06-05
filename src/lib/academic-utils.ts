@@ -8,6 +8,15 @@ export type AttendanceSubject = {
     color?: string;
 };
 
+export type AttendancePredictorSubject = {
+    id: string;
+    name: string;
+    code?: string;
+    attended: number;
+    total: number;
+    remainingClasses?: number;
+};
+
 export type AttendanceTone = "safe" | "warning" | "danger";
 export type ProgressTone = "green" | "orange" | "red";
 
@@ -32,6 +41,38 @@ export type ProjectedAttendanceAdvice = {
     remainingSkips: number;
     impossible: boolean;
     message: string;
+};
+
+export type AttendancePlan = {
+    percent: number;
+    status: AttendanceTone;
+    progressTone: ProgressTone;
+    classesNeeded: number;
+    remainingSkips: number;
+    remainingClasses: number;
+    projectedIfAttendAll: number;
+    projectedIfSkipAll: number;
+    isRecoverable: boolean;
+    headline: string;
+    advice: string;
+};
+
+export type AttendanceScenario = {
+    attended: number;
+    total: number;
+    percent: number;
+};
+
+export type AttendancePredictorPlan = {
+    percent: number;
+    status: AttendanceTone;
+    classesNeeded: number;
+    remainingSkips: number;
+    projectedIfAttendAll: number;
+    projectedIfSkipAll: number;
+    isRecoverable: boolean;
+    headline: string;
+    advice: string;
 };
 
 export type InstructionalEstimateInput = {
@@ -80,12 +121,34 @@ export function clampNumber(value: number, min: number, max: number) {
     return Math.min(max, Math.max(min, value));
 }
 
-export function getAttendancePercent(subject: AttendanceSubject) {
-    if (!subject.total || subject.total <= 0) return 0;
+function safeClassCount(value: number) {
+    if (!Number.isFinite(value) || Number.isNaN(value)) return 0;
 
-    const percent = (subject.attended / subject.total) * 100;
+    return Math.max(0, Math.floor(value));
+}
 
-    return Number(clampNumber(percent, 0, 100).toFixed(2));
+export function clampPercent(value: number) {
+    return Number(clampNumber(value, 0, 100).toFixed(2));
+}
+
+export function getAttendancePercent(subject: AttendanceSubject): number;
+export function getAttendancePercent(attended: number, total: number): number;
+export function getAttendancePercent(
+    subjectOrAttended: AttendanceSubject | number,
+    total?: number
+) {
+    const attended =
+        typeof subjectOrAttended === "number"
+            ? subjectOrAttended
+            : subjectOrAttended.attended;
+    const classTotal =
+        typeof subjectOrAttended === "number" ? total ?? 0 : subjectOrAttended.total;
+
+    if (!classTotal || classTotal <= 0) return 0;
+
+    const percent = (attended / classTotal) * 100;
+
+    return clampPercent(percent);
 }
 
 export function getExactAttendancePercent(subject: AttendanceSubject) {
@@ -159,19 +222,23 @@ export function getRequiredClassesToReachTarget(
     total: number,
     target = 75
 ) {
-    const targetRatio = target / 100;
+    const safeAttended = safeClassCount(attended);
+    const safeTotal = Math.max(safeClassCount(total), safeAttended);
+    const safeTarget = clampNumber(target, 0, 100);
+    const targetRatio = safeTarget / 100;
 
     if (targetRatio <= 0) return 0;
+    if (safeTotal <= 0) return 1;
+
+    const currentPercent = safeTotal > 0 ? (safeAttended / safeTotal) * 100 : 0;
+
+    if (currentPercent >= safeTarget) return 0;
 
     if (targetRatio >= 1) {
-        return attended >= total ? 0 : Number.POSITIVE_INFINITY;
+        return 0;
     }
 
-    const currentPercent = total > 0 ? (attended / total) * 100 : 0;
-
-    if (currentPercent >= target) return 0;
-
-    const required = (targetRatio * total - attended) / (1 - targetRatio);
+    const required = (targetRatio * safeTotal - safeAttended) / (1 - targetRatio);
 
     return Math.max(0, Math.ceil(required));
 }
@@ -181,13 +248,18 @@ export function getRemainingSkips(
     total: number,
     target = 75
 ) {
-    const targetRatio = target / 100;
+    const safeAttended = safeClassCount(attended);
+    const safeTotal = Math.max(safeClassCount(total), safeAttended);
+    const safeTarget = clampNumber(target, 0, 100);
+    const targetRatio = safeTarget / 100;
 
-    if (targetRatio <= 0) return Number.POSITIVE_INFINITY;
+    if (targetRatio <= 0) return safeTotal;
     if (targetRatio >= 1) return 0;
 
-    const allowedTotal = attended / targetRatio;
-    const skips = Math.floor(allowedTotal - total);
+    if (getAttendancePercent(safeAttended, safeTotal) < safeTarget) return 0;
+
+    const allowedTotal = safeAttended / targetRatio;
+    const skips = Math.floor(allowedTotal - safeTotal);
 
     return Math.max(0, skips);
 }
@@ -196,28 +268,138 @@ export function getProjectedAttendanceIfAttendAll(
     subject: AttendanceSubject,
     remainingClasses: number
 ) {
-    const safeRemaining = Math.max(0, remainingClasses);
+    const safeRemaining = safeClassCount(remainingClasses);
     const projectedTotal = subject.total + safeRemaining;
 
     if (projectedTotal <= 0) return 0;
 
     const projected = ((subject.attended + safeRemaining) / projectedTotal) * 100;
 
-    return Math.round(clampNumber(projected, 0, 100));
+    return clampPercent(projected);
 }
 
 export function getProjectedAttendanceIfSkipAll(
     subject: AttendanceSubject,
     remainingClasses: number
 ) {
-    const safeRemaining = Math.max(0, remainingClasses);
+    const safeRemaining = safeClassCount(remainingClasses);
     const projectedTotal = subject.total + safeRemaining;
 
     if (projectedTotal <= 0) return 0;
 
     const projected = (subject.attended / projectedTotal) * 100;
 
-    return Math.round(clampNumber(projected, 0, 100));
+    return clampPercent(projected);
+}
+
+export function getAttendancePredictorPlan({
+    attended,
+    total,
+    target,
+    remainingClasses,
+}: {
+    attended: number;
+    total: number;
+    target: number;
+    remainingClasses?: number;
+}): AttendancePredictorPlan {
+    const safeAttended = safeClassCount(attended);
+    const safeTotal = Math.max(safeClassCount(total), safeAttended);
+    const safeTarget = clampNumber(target, 0, 100);
+    const safeRemainingClasses =
+        remainingClasses === undefined ? undefined : safeClassCount(remainingClasses);
+    const percent = getAttendancePercent(safeAttended, safeTotal);
+    const status = getAttendanceTone(percent, safeTarget);
+    const classesNeeded = getRequiredClassesToReachTarget(
+        safeAttended,
+        safeTotal,
+        safeTarget
+    );
+    const remainingSkips = getRemainingSkips(safeAttended, safeTotal, safeTarget);
+    const projectedIfAttendAll = getAttendancePercent(
+        safeAttended + (safeRemainingClasses ?? 0),
+        safeTotal + (safeRemainingClasses ?? 0)
+    );
+    const projectedIfSkipAll = getAttendancePercent(
+        safeAttended,
+        safeTotal + (safeRemainingClasses ?? 0)
+    );
+    const perfectTargetCannotRecover =
+        safeTarget >= 100 && percent < safeTarget && safeAttended < safeTotal;
+    const isRecoverable =
+        percent >= safeTarget ||
+        safeRemainingClasses === undefined ||
+        (!perfectTargetCannotRecover && classesNeeded <= safeRemainingClasses);
+
+    let headline = "On track";
+    let advice = `You can bunk ${remainingSkips} class${remainingSkips === 1 ? "" : "es"} and stay above ${safeTarget}%.`;
+
+    if (percent < safeTarget) {
+        headline = isRecoverable ? "Recovery path" : "Recovery risk";
+        advice = perfectTargetCannotRecover
+            ? "A 100% target cannot be recovered after missed classes."
+            : isRecoverable
+                ? `Attend next ${classesNeeded} class${classesNeeded === 1 ? "" : "es"} to reach ${safeTarget}%.`
+                : `Attend all ${safeRemainingClasses ?? 0} remaining class${safeRemainingClasses === 1 ? "" : "es"} and you may still miss ${safeTarget}%.`;
+    } else if (remainingSkips <= 0) {
+        headline = "Hold the line";
+        advice = `Stay consistent to remain above ${safeTarget}%.`;
+    }
+
+    return {
+        percent,
+        status,
+        classesNeeded,
+        remainingSkips,
+        projectedIfAttendAll,
+        projectedIfSkipAll,
+        isRecoverable,
+        headline,
+        advice,
+    };
+}
+
+export function getAttendancePlan(
+    subject: AttendanceSubject,
+    target = 75,
+    remainingClasses = 0
+): AttendancePlan {
+    const safeRemainingClasses = safeClassCount(remainingClasses);
+    const plan = getAttendancePredictorPlan({
+        attended: subject.attended,
+        total: subject.total,
+        target,
+        remainingClasses: safeRemainingClasses,
+    });
+
+    return {
+        ...plan,
+        progressTone: getProgressTone(plan.status),
+        remainingClasses: safeRemainingClasses,
+    };
+}
+
+export function simulateAttendanceScenario(
+    attended: number,
+    total: number,
+    attendNext: number,
+    skipNext: number
+): AttendanceScenario {
+    const safeAttendNext = safeClassCount(attendNext);
+    const safeSkipNext = safeClassCount(skipNext);
+    const currentAttended = safeClassCount(attended);
+    const currentTotal = Math.max(safeClassCount(total), currentAttended);
+    const projectedAttended = currentAttended + safeAttendNext;
+    const projectedTotal =
+        currentTotal +
+        safeAttendNext +
+        safeSkipNext;
+
+    return {
+        attended: projectedAttended,
+        total: projectedTotal,
+        percent: getAttendancePercent(projectedAttended, projectedTotal),
+    };
 }
 
 export function getProjectedAttendanceAdvice(
@@ -225,63 +407,19 @@ export function getProjectedAttendanceAdvice(
     target = 75,
     remainingClasses = 0
 ): ProjectedAttendanceAdvice {
-    const percent = getAttendancePercent(subject);
-    const tone = getAttendanceTone(percent, target);
-    const progressTone = getProgressTone(tone);
-
-    const classesNeeded = getRequiredClassesToReachTarget(
-        subject.attended,
-        subject.total,
-        target
-    );
-
-    const remainingSkips = getRemainingSkips(
-        subject.attended,
-        subject.total,
-        target
-    );
-
-    const projectedIfAttendAll = getProjectedAttendanceIfAttendAll(
-        subject,
-        remainingClasses
-    );
-
-    const projectedIfSkipAll = getProjectedAttendanceIfSkipAll(
-        subject,
-        remainingClasses
-    );
-
-    const impossible =
-        remainingClasses > 0
-            ? projectedIfAttendAll < target
-            : classesNeeded === Number.POSITIVE_INFINITY;
-
-    let message = "You are currently safe.";
-
-    if (impossible) {
-        message =
-            "Even attending all remaining estimated classes may not reach target.";
-    } else if (percent < target) {
-        message = `Attend next ${classesNeeded} class${classesNeeded === 1 ? "" : "es"
-            } to reach ${target}%.`;
-    } else if (remainingSkips > 0) {
-        message = `You can skip around ${remainingSkips} class${remainingSkips === 1 ? "" : "es"
-            } and stay above ${target}%.`;
-    } else {
-        message = `Stay consistent to remain above ${target}%.`;
-    }
+    const plan = getAttendancePlan(subject, target, remainingClasses);
 
     return {
-        percent,
-        tone,
-        progressTone,
-        remainingClasses: Math.max(0, remainingClasses),
-        projectedIfAttendAll,
-        projectedIfSkipAll,
-        classesNeeded,
-        remainingSkips,
-        impossible,
-        message,
+        percent: plan.percent,
+        tone: plan.status,
+        progressTone: plan.progressTone,
+        remainingClasses: plan.remainingClasses,
+        projectedIfAttendAll: plan.projectedIfAttendAll,
+        projectedIfSkipAll: plan.projectedIfSkipAll,
+        classesNeeded: plan.classesNeeded,
+        remainingSkips: plan.remainingSkips,
+        impossible: !plan.isRecoverable,
+        message: plan.advice,
     };
 }
 

@@ -3,6 +3,7 @@ import {
     Armchair,
     BarChart3,
     CalendarDays,
+    Calculator,
     Clock3,
     GraduationCap,
     LayoutDashboard,
@@ -40,6 +41,11 @@ export const navItems: NavItem[] = [
         label: "Results",
         href: "/results",
         icon: GraduationCap,
+    },
+    {
+        label: "Predictor",
+        href: "/predictor",
+        icon: Calculator,
     },
     {
         label: "Seating",

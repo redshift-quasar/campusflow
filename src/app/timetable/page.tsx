@@ -305,7 +305,7 @@ function TimetableContent() {
                                 <StudioIconBubble icon={Timer} tone="blue" />
                             </div>
 
-                            <div className="studio-card-soft mt-6 p-5">
+                            <div className="studio-card-soft mt-6 space-y-3 p-5">
                                 <InfoRow label="Total classes" value={String(totalClasses)} />
                                 <InfoRow label="Lectures" value={String(lectureCount)} />
                                 <InfoRow label="Labs" value={String(labCount)} />

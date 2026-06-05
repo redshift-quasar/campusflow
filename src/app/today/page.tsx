@@ -341,31 +341,31 @@ export default function TodayPage() {
                                             Enjoy your day.
                                         </p>
                                     ) : (
-                                        <div className="mt-5">
-                                        <InfoRow
-                                            label="Time"
-                                            value={
-                                                currentClass
-                                                    ? `${currentClass.time} • ${currentClass.duration}`
-                                                    : "-"
-                                            }
-                                        />
-                                        <InfoRow label="Room" value={currentClass?.room ?? "-"} />
-                                        <InfoRow
-                                            label="Faculty"
-                                            value={currentClass?.faculty ?? "-"}
-                                        />
-                                        <InfoRow
-                                            label="Type"
-                                            value={currentClass?.type ?? "-"}
-                                        />
-                                        <InfoRow label="Source" value={sourceLabel} />
-                                        {source === "pesu" && lastFinalizedAt && (
+                                        <div className="mt-5 space-y-3">
                                             <InfoRow
-                                                label="Finalized"
-                                                value={formatOptionalDate(lastFinalizedAt)}
+                                                label="Time"
+                                                value={
+                                                    currentClass
+                                                        ? `${currentClass.time} • ${currentClass.duration}`
+                                                        : "-"
+                                                }
                                             />
-                                        )}
+                                            <InfoRow label="Room" value={currentClass?.room ?? "-"} />
+                                            <InfoRow
+                                                label="Faculty"
+                                                value={currentClass?.faculty ?? "-"}
+                                            />
+                                            <InfoRow
+                                                label="Type"
+                                                value={currentClass?.type ?? "-"}
+                                            />
+                                            <InfoRow label="Source" value={sourceLabel} />
+                                            {source === "pesu" && lastFinalizedAt && (
+                                                <InfoRow
+                                                    label="Finalized"
+                                                    value={formatOptionalDate(lastFinalizedAt)}
+                                                />
+                                            )}
                                         </div>
                                     )}
                                 </div>
