@@ -99,6 +99,33 @@ export type SafePesuSeating = {
     items: SafePesuSeatingItem[];
 };
 
+export type SafePesuCalendarEvent = {
+  id: string;
+  title: string;
+  date: string;
+  endDate?: string;
+  type: "holiday" | "isa" | "esa" | "semester-start" | "semester-end" | "exam" | "event" | "blocked" | "non-instructional" | "unknown";
+  source?: "pesu-academy" | "pes-public-calendar" | "manual" | "unknown";
+  rawType?: string | null;
+  description?: string | null;
+  color?: string | null;
+  isHoliday?: boolean;
+  isClass?: boolean;
+  calendarOfEventName?: string | null;
+};
+
+export type SafePesuCalendar = {
+  source: "pesu-academy" | "pes-public-calendar" | "manual" | "unknown";
+  semesterId?: string | null;
+  name?: string;
+  startDate?: string;
+  endDate?: string;
+  calendarStatus?: "active" | "upcoming" | "past" | "unknown";
+  usableForPrediction?: boolean;
+  blockedDateKeys?: string[];
+  events: SafePesuCalendarEvent[];
+};
+
 export type SafePesuSyncResponse = {
     ok: boolean;
     source: "pesu";
@@ -108,7 +135,7 @@ export type SafePesuSyncResponse = {
     courses: SafePesuCourse[];
     timetable?: SafePesuTimetable;
     results?: SafePesuResults;
-    seating?: SafePesuSeating;
+    seating?: SafePesuSeating; calendar?: SafePesuCalendar;
     errors?: {
         attendance?: string | null;
         courses?: string | null;

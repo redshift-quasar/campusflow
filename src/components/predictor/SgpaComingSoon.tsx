@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { GraduationCap, Sparkles } from "lucide-react";
+import { GraduationCap } from "lucide-react";
 
 import { StudioCard, StudioIconBubble } from "@/components/studio/Studio";
 import { sectionMotion } from "@/lib/motion";

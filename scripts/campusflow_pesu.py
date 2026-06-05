@@ -7,6 +7,7 @@ import sys
 import time
 import traceback
 from html import unescape
+from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import unquote
 
@@ -14,6 +15,8 @@ from bs4 import BeautifulSoup
 from pesuacademy import PESUAcademy
 
 
+PORTAL_HOME_URL = "https://www.pesuacademy.com/Academy/s/studentProfilePESU"
+PORTAL_ADMIN_URL = "https://www.pesuacademy.com/Academy/s/studentProfilePESUAdmin"
 TIMETABLE_URL = "https://www.pesuacademy.com/Academy/s/studentProfilePESUAdmin"
 RESULTS_URL = "https://www.pesuacademy.com/Academy/a/studentProfilePESU/getEsaAndIsaResultSemBySRN"
 CURRENT_RESULTS_URL = "https://www.pesuacademy.com/Academy/s/studentProfilePESUAdmin"
@@ -33,6 +36,33 @@ SEATING_PARAMS = {
     "menuId": "655",
     "url": "studentProfilePESUAdmin",
     "controllerMode": "6404",
+    "actionType": "5",
+    "id": "0",
+    "selectedData": "0",
+}
+
+
+CALENDAR_PROBE_KEYWORDS = [
+    "calendar",
+    "academic calendar",
+    "holiday",
+    "holidays",
+    "event",
+    "events",
+    "semester",
+    "isa",
+    "esa",
+    "assessment",
+    "exam",
+    "examination",
+    "last working day",
+]
+
+
+CALENDAR_PARAMS = {
+    "menuId": "668",
+    "url": "studentProfilePESUAdmin",
+    "controllerMode": "6413",
     "actionType": "5",
     "id": "0",
     "selectedData": "0",
@@ -1513,6 +1543,211 @@ def make_xhr_headers(pesu: Any):
     return headers
 
 
+
+
+def redact_probe_text(value: Any):
+    text = clean_text(value)
+
+    if not text:
+        return ""
+
+    text = re.sub(
+        r"(?i)\b(password|token|csrf|cookie|session)\b\s*[:=]\s*['\"]?[^'\"\s>]+",
+        r"\1=[redacted]",
+        text,
+    )
+    text = re.sub(r"[A-Za-z0-9+/=_\-.]{48,}", "[redacted-token]", text)
+    text = re.sub(r"\b[A-Z]{3}\d{2}[A-Z]{2}\d{3}\b", "[redacted-srn]", text)
+    text = re.sub(r"\b\d{10}\b", "[redacted-phone]", text)
+    text = re.sub(
+        r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+        "[redacted-email]",
+        text,
+    )
+
+    return text[:500]
+
+
+def collect_keyword_snippets(source: str, limit: int = 15):
+    normalized = clean_text(source)
+    lower = normalized.lower()
+    snippets = []
+
+    for keyword in CALENDAR_PROBE_KEYWORDS:
+        start = 0
+
+        while True:
+            index = lower.find(keyword.lower(), start)
+
+            if index == -1:
+                break
+
+            left = max(0, index - 180)
+            right = min(len(normalized), index + 300)
+            snippets.append(redact_probe_text(normalized[left:right]))
+
+            start = index + len(keyword)
+
+            if len(snippets) >= limit:
+                return snippets
+
+    return snippets
+
+
+def collect_calendar_like_nodes(html: str, limit: int = 30):
+    hits = []
+
+    try:
+        soup = BeautifulSoup(html or "", "html.parser")
+
+        for node in soup.find_all(True):
+            text = get_clean_text(node)
+
+            attrs = []
+            for key, value in (node.attrs or {}).items():
+                attrs.append(f"{key}={value}")
+
+            context = clean_text(f"{node.name} {text} {' '.join(attrs)}")
+
+            if not context:
+                continue
+
+            if re.search(
+                r"calendar|academic|holiday|event|semester|isa|esa|exam|assessment",
+                context,
+                re.I,
+            ):
+                hits.append(redact_probe_text(context))
+
+            if len(hits) >= limit:
+                break
+    except Exception as error:
+        hits.append(f"Could not parse nodes: {error}")
+
+    return hits
+
+
+def collect_possible_calendar_params(html: str, limit: int = 30):
+    normalized = normalize_semid_html(html or "")
+    hits = []
+
+    patterns = [
+        r"menuId\s*[:=]\s*['\"]?(\d{2,6})['\"]?[\s\S]{0,240}?(?:calendar|holiday|event|semester|isa|esa|exam|assessment)",
+        r"(?:calendar|holiday|event|semester|isa|esa|exam|assessment)[\s\S]{0,240}?menuId\s*[:=]\s*['\"]?(\d{2,6})['\"]?",
+        r"controllerMode\s*[:=]\s*['\"]?(\d{2,6})['\"]?[\s\S]{0,240}?(?:calendar|holiday|event|semester|isa|esa|exam|assessment)",
+        r"(?:calendar|holiday|event|semester|isa|esa|exam|assessment)[\s\S]{0,240}?controllerMode\s*[:=]\s*['\"]?(\d{2,6})['\"]?",
+        r"actionType\s*[:=]\s*['\"]?(\d{1,3})['\"]?[\s\S]{0,240}?(?:calendar|holiday|event|semester|isa|esa|exam|assessment)",
+    ]
+
+    for pattern in patterns:
+        for match in re.finditer(pattern, normalized, re.I):
+            left = max(0, match.start() - 180)
+            right = min(len(normalized), match.end() + 260)
+            hits.append(redact_probe_text(normalized[left:right]))
+
+            if len(hits) >= limit:
+                return hits
+
+    return hits
+
+
+async def fetch_portal_calendar_probe(pesu: Any):
+    http_client = find_internal_http_client(pesu)
+
+    if http_client is None:
+        raise RuntimeError("Could not find authenticated PESU HTTP client for calendar probe.")
+
+    headers = make_xhr_headers(pesu)
+
+    candidate_requests = [
+        {
+            "name": "student-profile",
+            "method": "get",
+            "url": PORTAL_HOME_URL,
+            "params": {"_": str(int(time.time() * 1000))},
+        },
+        {
+            "name": "student-profile-admin",
+            "method": "get",
+            "url": PORTAL_ADMIN_URL,
+            "params": {"_": str(int(time.time() * 1000))},
+        },
+        {
+            "name": "timetable-menu-neighbourhood",
+            "method": "get",
+            "url": PORTAL_ADMIN_URL,
+            "params": {
+                "menuId": "669",
+                "url": "studentProfilePESUAdmin",
+                "controllerMode": "6415",
+                "actionType": "5",
+                "id": "0",
+                "selectedData": "0",
+                "_": str(int(time.time() * 1000)),
+            },
+        },
+        {
+            "name": "portal-calendar-menu-668",
+            "method": "get",
+            "url": PORTAL_ADMIN_URL,
+            "params": {
+                **CALENDAR_PARAMS,
+                "_": str(int(time.time() * 1000)),
+            },
+        },
+    ]
+
+    results = []
+
+    for candidate in candidate_requests:
+        try:
+            if candidate["method"] == "post" and hasattr(http_client, "post"):
+                response = await maybe_await(
+                    http_client.post(
+                        candidate["url"],
+                        data=candidate.get("data"),
+                        headers=headers,
+                    )
+                )
+            else:
+                response = await maybe_await(
+                    http_client.get(
+                        candidate["url"],
+                        params=candidate.get("params"),
+                        headers=headers,
+                    )
+                )
+
+            html = await response_to_text(response)
+            normalized = normalize_semid_html(html)
+            lower = normalized.lower()
+
+            results.append(
+                {
+                    "source": candidate["name"],
+                    "url": candidate["url"],
+                    "params": candidate.get("params"),
+                    "htmlLength": len(str(html or "")),
+                    "hasCalendarText": any(
+                        keyword.lower() in lower for keyword in CALENDAR_PROBE_KEYWORDS
+                    ),
+                    "calendarHits": collect_keyword_snippets(normalized),
+                    "linkLikeHits": collect_calendar_like_nodes(html),
+                    "possibleParams": collect_possible_calendar_params(normalized),
+                }
+            )
+        except Exception as error:
+            results.append(
+                {
+                    "source": candidate["name"],
+                    "url": candidate["url"],
+                    "params": candidate.get("params"),
+                    "error": str(error),
+                }
+            )
+
+    return results
+
 async def response_to_text(response: Any):
     if isinstance(response, str):
         return response
@@ -1672,6 +1907,381 @@ async def fetch_seating_html(pesu: Any):
     )
 
     return await response_to_text(response)
+
+
+
+def default_calendar():
+    return {
+        "source": "pesu-academy",
+        "semesterId": None,
+        "name": "",
+        "startDate": "",
+        "endDate": "",
+        "calendarStatus": "unknown",
+        "usableForPrediction": False,
+        "blockedDateKeys": [],
+        "events": [],
+    }
+
+
+def parse_portal_calendar_datetime(value: Any):
+    text = clean_text(value)
+
+    if not text:
+        return None
+
+    # PESU portal usually sends dates like: Aug 15, 2025, 12:00:00 AM
+    for fmt in [
+        "%b %d, %Y, %I:%M:%S %p",
+        "%b %d, %Y",
+        "%B %d, %Y, %I:%M:%S %p",
+        "%B %d, %Y",
+    ]:
+        try:
+            return datetime.strptime(text, fmt)
+        except Exception:
+            pass
+
+    return None
+
+
+def to_date_key_from_datetime(value: datetime | None):
+    if value is None:
+        return ""
+
+    return value.strftime("%Y-%m-%d")
+
+
+def normalize_portal_calendar_end_date(start_dt: datetime | None, end_dt: datetime | None):
+    if start_dt is None or end_dt is None:
+        return ""
+
+    # FullCalendar style: endDate is exclusive. Aug 15 -> Aug 16 means one-day event.
+    inclusive_end = end_dt - timedelta(days=1)
+
+    if inclusive_end <= start_dt:
+        return ""
+
+    return to_date_key_from_datetime(inclusive_end)
+
+
+def get_today_date_key():
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def get_calendar_status(start_date: str, end_date: str):
+    today = get_today_date_key()
+
+    if not start_date or not end_date:
+        return "unknown"
+
+    if end_date < today:
+        return "past"
+
+    if start_date > today:
+        return "upcoming"
+
+    return "active"
+
+
+def expand_date_range(start_date: str, end_date: str | None = None):
+    if not start_date:
+        return []
+
+    if not end_date or end_date == start_date:
+        return [start_date]
+
+    try:
+        start = datetime.strptime(start_date, "%Y-%m-%d")
+        end = datetime.strptime(end_date, "%Y-%m-%d")
+    except Exception:
+        return [start_date]
+
+    if end < start:
+        return [start_date]
+
+    dates = []
+    cursor = start
+
+    while cursor <= end:
+        dates.append(cursor.strftime("%Y-%m-%d"))
+        cursor += timedelta(days=1)
+
+    return dates
+
+
+def is_truthy_portal_flag(value: Any):
+    return str(value).strip().lower() in {"1", "true", "yes", "y"}
+
+
+def classify_portal_calendar_event(raw_event: dict[str, Any]):
+    name = clean_text(raw_event.get("name"))
+    description = clean_text(raw_event.get("description"))
+    event_type = clean_text(raw_event.get("eventType"))
+    text = f"{name} {description} {event_type}".lower()
+
+    if (
+        "last working day" in text
+        or "lwd" in text
+        or "semester end" in text
+        or "end of classes" in text
+    ):
+        return "semester-end"
+
+    if (
+        "class commencement" in text
+        or "commencement of classes" in text
+        or "semester start" in text
+        or "start of classes" in text
+    ):
+        return "semester-start"
+
+    if "isa" in text or "internal assessment" in text:
+        return "isa"
+
+    if "esa" in text or "end semester assessment" in text or "end sem" in text:
+        return "esa"
+
+    if "exam" in text or "examination" in text:
+        return "exam"
+
+    if is_truthy_portal_flag(raw_event.get("isHoliday")):
+        return "holiday"
+
+    if (
+        "festival" in text
+        or "holiday" in text
+        or "vacation" in text
+        or "break" in text
+    ):
+        return "holiday"
+
+    if is_truthy_portal_flag(raw_event.get("isClass")):
+        return "event"
+
+    return "event"
+
+
+def extract_json_array_from_portal_calendar_html(html: str):
+    source = str(html or "")
+    marker = "JSON.parse(JSON.stringify("
+    marker_index = source.find(marker)
+
+    if marker_index == -1:
+        return None
+
+    array_start = source.find("[", marker_index + len(marker))
+
+    if array_start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escaped = False
+
+    for index in range(array_start, len(source)):
+        char = source[index]
+
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+
+            continue
+
+        if char == '"':
+            in_string = True
+            continue
+
+        if char == "[":
+            depth += 1
+
+        if char == "]":
+            depth -= 1
+
+            if depth == 0:
+                return source[array_start:index + 1]
+
+    return None
+
+
+def parse_portal_calendar_html(html: str):
+    json_array = extract_json_array_from_portal_calendar_html(html)
+
+    if not json_array:
+        return default_calendar()
+
+    try:
+        raw_events = json.loads(json_array)
+    except Exception:
+        return default_calendar()
+
+    if not isinstance(raw_events, list):
+        return default_calendar()
+
+    events = []
+    calendar_names = []
+    calendar_ids = []
+
+    for item in raw_events:
+        if not isinstance(item, dict):
+            continue
+
+        start_dt = parse_portal_calendar_datetime(item.get("startDate"))
+        end_dt = parse_portal_calendar_datetime(item.get("endDate"))
+        start_date = to_date_key_from_datetime(start_dt)
+
+        if not start_date:
+            continue
+
+        end_date = normalize_portal_calendar_end_date(start_dt, end_dt)
+
+        title = clean_text(item.get("name") or item.get("description") or "Calendar Event")
+        description = clean_text(item.get("description"))
+        event_type = classify_portal_calendar_event(item)
+
+        calendar_name = clean_text(item.get("calendarOfEventName"))
+        calendar_id = item.get("calendarOfEventId")
+
+        if calendar_name:
+            calendar_names.append(calendar_name)
+
+        if calendar_id is not None:
+            calendar_ids.append(str(calendar_id))
+
+        event_id = clean_text(
+            item.get("calendarEventDetailId")
+            or item.get("calendarEventId")
+            or f"{start_date}-{title}"
+        )
+
+        event = {
+            "id": f"pesu-academy-{event_id}",
+            "title": title,
+            "date": start_date,
+            "type": event_type,
+            "source": "pesu-academy",
+            "rawType": clean_text(item.get("eventType")),
+            "description": description,
+            "color": clean_text(item.get("color")) or None,
+            "isHoliday": is_truthy_portal_flag(item.get("isHoliday")),
+            "isClass": is_truthy_portal_flag(item.get("isClass")),
+            "calendarOfEventName": calendar_name or None,
+        }
+
+        if end_date:
+            event["endDate"] = end_date
+
+        events.append(event)
+
+    seen = {}
+    for event in events:
+        key = f"{event.get('date')}|{event.get('endDate', '')}|{event.get('title', '').lower()}"
+        if key not in seen:
+            seen[key] = event
+
+    events = sorted(seen.values(), key=lambda event: event.get("date", ""))
+
+    explicit_start = next(
+        (event.get("date") for event in events if event.get("type") == "semester-start"),
+        "",
+    )
+
+    explicit_end_candidates = [
+        event.get("date")
+        for event in events
+        if event.get("type") == "semester-end" and event.get("date")
+    ]
+
+    start_date = explicit_start
+
+    if not start_date:
+        first_non_holiday = next(
+            (
+                event.get("date")
+                for event in events
+                if event.get("type") not in {"holiday", "isa", "esa", "exam"}
+            ),
+            "",
+        )
+        start_date = first_non_holiday or (events[0].get("date") if events else "")
+
+    end_date = ""
+
+    if explicit_end_candidates:
+        end_date = sorted(explicit_end_candidates)[-1]
+    else:
+        non_footer_events = [
+            event
+            for event in events
+            if event.get("type") not in {"holiday", "isa", "esa", "exam"}
+        ]
+        if non_footer_events:
+            end_date = sorted(non_footer_events, key=lambda event: event.get("date", ""))[-1].get("date", "")
+        elif events:
+            end_date = events[-1].get("date", "")
+
+    status = get_calendar_status(start_date, end_date)
+    blocked_date_keys = sorted(
+        {
+            date
+            for event in events
+            if event.get("type") in {"holiday", "isa", "esa", "exam", "blocked", "non-instructional"}
+            for date in expand_date_range(event.get("date", ""), event.get("endDate"))
+        }
+    )
+
+    return {
+        "source": "pesu-academy",
+        "semesterId": sorted(set(calendar_ids))[0] if calendar_ids else None,
+        "name": sorted(set(calendar_names))[0] if calendar_names else "",
+        "startDate": start_date,
+        "endDate": end_date,
+        "calendarStatus": status,
+        "usableForPrediction": status in {"active", "upcoming"},
+        "blockedDateKeys": blocked_date_keys,
+        "events": events,
+    }
+
+
+async def fetch_portal_calendar_html(pesu: Any):
+    http_client = find_internal_http_client(pesu)
+
+    if http_client is None:
+        raise RuntimeError("Could not find authenticated PESU HTTP client for calendar.")
+
+    response = await maybe_await(
+        http_client.get(
+            PORTAL_ADMIN_URL,
+            params={**CALENDAR_PARAMS, "_": str(int(time.time() * 1000))},
+            headers=make_xhr_headers(pesu),
+        )
+    )
+
+    return await response_to_text(response)
+
+
+async def fetch_portal_calendar(pesu: Any):
+    html = await fetch_portal_calendar_html(pesu)
+    parsed = parse_portal_calendar_html(html)
+
+    if os.environ.get("CAMPUSFLOW_DEBUG_PESU") == "1":
+        print(
+            json.dumps(
+                {
+                    "debugCalendarHtmlLength": len(str(html or "")),
+                    "debugCalendarEventCount": len(parsed.get("events") or []),
+                    "debugCalendarName": parsed.get("name"),
+                    "debugCalendarStatus": parsed.get("calendarStatus"),
+                }
+            ),
+            file=sys.stderr,
+        )
+
+    return parsed
 
 async def fetch_timetable(pesu: Any):
     html = await fetch_timetable_html(pesu)
@@ -1905,11 +2515,64 @@ async def main():
 
         pesu = await maybe_await(PESUAcademy.login(username=username, password=password))
 
+        if os.environ.get("CAMPUSFLOW_PROBE_PORTAL_CALENDAR") == "1":
+            profile_result = await safe_call(lambda: pesu.get_profile())
+
+            if profile_result["ok"]:
+                profile = normalize_profile(profile_result["data"])
+            else:
+                profile = {
+                    "name": None,
+                    "srn": username,
+                    "pesuId": None,
+                    "program": None,
+                    "branch": None,
+                    "semester": None,
+                    "semesterNumber": None,
+                    "section": None,
+                    "photoDataUrl": None,
+                }
+
+            probe = await fetch_portal_calendar_probe(pesu)
+
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "source": "pesu",
+                        "syncedAt": payload.get("syncedAt"),
+                        "profile": profile,
+                        "attendance": [],
+                        "courses": [],
+                        "timetable": {
+                            "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+                            "roomId": None,
+                            "lastFinalizedAt": "",
+                            "slots": [],
+                        },
+                        "results": default_results(),
+                        "seating": default_seating(),
+                        "calendarProbe": probe,
+                        "errors": {
+                            "attendance": None,
+                            "courses": None,
+                            "timetable": None,
+                            "results": None,
+                            "seating": None,
+                            "profile": None if profile_result["ok"] else profile_result.get("error"),
+                        },
+                    }
+                )
+            )
+            return
+
+
         profile_result = await safe_call(lambda: pesu.get_profile())
         attendance_result = await safe_call(lambda: pesu.get_attendance())
         courses_result = await safe_call(lambda: pesu.get_courses())
         timetable_result = await safe_call(lambda: fetch_timetable(pesu))
         seating_result = await safe_call(lambda: fetch_seating(pesu))
+        calendar_result = await safe_call(lambda: fetch_portal_calendar(pesu))
 
         if not profile_result["ok"]:
             raise RuntimeError(profile_result.get("error") or "Could not fetch profile.")
@@ -1996,6 +2659,7 @@ async def main():
         courses = []
         results = default_results()
         seating = default_seating()
+        calendar = default_calendar()
         timetable = {
             "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
             "roomId": None,
@@ -2018,6 +2682,9 @@ async def main():
         if seating_result["ok"]:
             seating = seating_result["data"]
 
+        if calendar_result["ok"]:
+            calendar = calendar_result["data"]
+
         print(
             json.dumps(
                 {
@@ -2030,12 +2697,14 @@ async def main():
                     "timetable": timetable,
                     "results": results,
                     "seating": seating,
+                    "calendar": calendar,
                     "errors": {
                         "attendance": None if attendance_result["ok"] else attendance_result.get("error"),
                         "courses": None if courses_result["ok"] else courses_result.get("error"),
                         "timetable": None if timetable_result["ok"] else timetable_result.get("error"),
                         "results": None if results_result["ok"] else results_result.get("error"),
                         "seating": None if seating_result["ok"] else seating_result.get("error"),
+                        "calendar": None if calendar_result["ok"] else calendar_result.get("error"),
                     },
                 }
             )
