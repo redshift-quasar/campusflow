@@ -45,7 +45,6 @@ import {
 } from "@/components/studio/Studio";
 
 type Tone = "blue" | "green" | "orange" | "violet" | "red" | "slate";
-const attendanceTargetOptions = [75, 80, 85, 90];
 
 function AttendanceContent() {
     const { user } = useLocalAuth();
@@ -67,9 +66,6 @@ function AttendanceContent() {
     const displayName = user?.name ?? user?.srn ?? "Student";
 
     const attendanceTarget = useSettingsStore((state) => state.attendanceTarget);
-    const setAttendanceTarget = useSettingsStore(
-        (state) => state.setAttendanceTarget
-    );
     const semesterStartDate = useSettingsStore((state) => state.semesterStartDate);
     const semesterEndDate = useSettingsStore((state) => state.semesterEndDate);
 
@@ -135,11 +131,6 @@ function AttendanceContent() {
     const warningSubjects = getWarningSubjects(subjects, attendanceTarget);
     const safeSubjects = getSafeSubjects(subjects, attendanceTarget);
     const criticalSubject = getCriticalSubject(subjects, attendanceTarget);
-    const criticalSubjectPrediction = criticalSubject
-        ? subjectsWithPrediction.find(
-            (item) => item.subject.code === criticalSubject.code
-        )
-        : null;
 
     const averageAttendance =
         subjects.length > 0
@@ -336,22 +327,56 @@ function AttendanceContent() {
                     </main>
 
                     <aside className="space-y-6">
-                        <CriticalSubjectPanel
-                            subject={criticalSubject}
-                            target={attendanceTarget}
-                            remainingClasses={
-                                criticalSubjectPrediction?.remainingClasses ?? 0
-                            }
-                            lowCount={lowSubjects.length}
-                            warningCount={warningSubjects.length}
-                            safeCount={safeSubjects.length}
-                            totalCount={subjects.length}
-                        />
+                        <motion.section
+                            variants={sectionMotion}
+                            initial="initial"
+                            animate="animate"
+                            className="studio-card p-5"
+                        >
+                            <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <p className="text-sm font-semibold text-slate-400">
+                                        Critical Subject
+                                    </p>
 
-                        <AttendanceTargetPanel
-                            value={attendanceTarget}
-                            onChange={setAttendanceTarget}
-                        />
+                                    <h2 className="mt-2 text-2xl font-black tracking-tight">
+                                        {criticalSubject?.name ?? "No subject"}
+                                    </h2>
+
+                                    <p className="mt-2 text-sm leading-6 text-slate-500">
+                                        {criticalSubject
+                                            ? `${criticalSubject.code} • ${getAttendancePercent(
+                                                criticalSubject
+                                            )}% attendance`
+                                            : "No attendance data available."}
+                                    </p>
+                                </div>
+
+                                <StudioIconBubble
+                                    icon={criticalSubject ? AlertTriangle : ShieldCheck}
+                                    tone={criticalSubject ? "orange" : "green"}
+                                />
+                            </div>
+
+                            {criticalSubject && (
+                                <div className="mt-6">
+                                    <StudioProgressBar
+                                        value={getAttendancePercent(criticalSubject)}
+                                        tone={progressToneFromSubject(
+                                            criticalSubject,
+                                            attendanceTarget
+                                        )}
+                                    />
+                                </div>
+                            )}
+
+                            <div className="mt-6 grid grid-cols-2 gap-3">
+                                <StudioMini label="Low" value={lowSubjects.length} />
+                                <StudioMini label="Warning" value={warningSubjects.length} />
+                                <StudioMini label="Safe" value={safeSubjects.length} />
+                                <StudioMini label="Total" value={subjects.length} />
+                            </div>
+                        </motion.section>
 
                         <motion.section
                             variants={sectionMotion}
@@ -448,211 +473,6 @@ export default function AttendancePage() {
         }>
             <AttendanceContent />
         </Suspense>
-    );
-}
-
-function CriticalSubjectPanel({
-    subject,
-    target,
-    remainingClasses,
-    lowCount,
-    warningCount,
-    safeCount,
-    totalCount,
-}: {
-    subject: AttendanceSubject | null;
-    target: number;
-    remainingClasses: number;
-    lowCount: number;
-    warningCount: number;
-    safeCount: number;
-    totalCount: number;
-}) {
-    if (!subject) {
-        return (
-            <motion.section
-                variants={sectionMotion}
-                initial="initial"
-                animate="animate"
-                className="studio-card p-5"
-            >
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <p className="text-sm font-semibold text-slate-400">
-                            Critical Subject
-                        </p>
-
-                        <h2 className="mt-2 text-2xl font-black tracking-tight">
-                            No subject data
-                        </h2>
-
-                        <p className="mt-2 text-sm leading-6 text-slate-500">
-                            Sync attendance to see the subject that needs attention first.
-                        </p>
-                    </div>
-
-                    <StudioIconBubble icon={ShieldCheck} tone="green" />
-                </div>
-            </motion.section>
-        );
-    }
-
-    const percent = getAttendancePercent(subject);
-    const tone = getAttendanceTone(subject, target);
-    const progressTone = progressToneFromSubject(subject, target);
-    const advice = getProjectedAttendanceAdvice(subject, target, remainingClasses);
-    const gap = Math.max(0, Number((target - percent).toFixed(2)));
-    const toneClasses = getToneClasses(progressTone);
-    const headline =
-        tone === "safe"
-            ? "Lowest subject, still safe"
-            : tone === "warning"
-                ? "Close to target"
-                : "Needs attention";
-    const detail =
-        tone === "safe"
-            ? `You are ${Number((percent - target).toFixed(2))}% above the ${target}% target.`
-            : `${gap}% below the ${target}% target. ${advice.message}`;
-
-    return (
-        <motion.section
-            variants={sectionMotion}
-            initial="initial"
-            animate="animate"
-            className="studio-card p-5"
-        >
-            <div className="flex items-start justify-between gap-4">
-                <div>
-                    <p className="text-sm font-semibold text-slate-400">
-                        Critical Subject
-                    </p>
-
-                    <h2 className="mt-2 text-2xl font-black tracking-tight">
-                        {subject.name}
-                    </h2>
-
-                    <p className="mt-2 text-sm leading-6 text-slate-500">
-                        {subject.code} • {subject.attended}/{subject.total} classes
-                    </p>
-                </div>
-
-                <StudioIconBubble
-                    icon={tone === "safe" ? ShieldCheck : AlertTriangle}
-                    tone={tone === "safe" ? "green" : tone === "warning" ? "orange" : "red"}
-                />
-            </div>
-
-            <div className="mt-6 flex items-end justify-between gap-4">
-                <div>
-                    <p className={`text-xs font-black uppercase tracking-[0.18em] ${toneClasses.chip}`}>
-                        {headline}
-                    </p>
-
-                    <p className="mt-2 text-5xl font-black tracking-[-0.06em] text-white">
-                        {percent}%
-                    </p>
-                </div>
-
-                <p className="mb-1 text-right text-xs font-black uppercase tracking-[0.14em] text-slate-600">
-                    Target {target}%
-                </p>
-            </div>
-
-            <div className="mt-4">
-                <StudioProgressBar value={percent} tone={progressTone} />
-            </div>
-
-            <div className="mt-5 rounded-[1.35rem] border border-white/[0.06] bg-white/[0.035] p-4">
-                <p className="text-sm font-black text-white">{detail}</p>
-                <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
-                    {advice.impossible
-                        ? "Even attending all estimated remaining classes may not fully recover this subject."
-                        : `Projected: ${advice.projectedIfAttendAll}% if you attend all, ${advice.projectedIfSkipAll}% if you skip all estimated classes.`}
-                </p>
-            </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-3">
-                <MiniBox label="Need" value={advice.classesNeeded} />
-                <MiniBox label="Can skip" value={advice.remainingSkips} />
-                <MiniBox label="Left" value={advice.remainingClasses} />
-                <MiniBox label="Gap" value={`${gap}%`} />
-            </div>
-
-            <div className="mt-5 rounded-[1.35rem] border border-white/[0.06] bg-white/[0.025] p-3">
-                <p className="px-1 text-xs font-black uppercase tracking-[0.18em] text-slate-600">
-                    Subjects Summary
-                </p>
-
-                <div className="mt-3 grid grid-cols-2 gap-3">
-                    <StudioMini label="Low" value={lowCount} />
-                    <StudioMini label="Warning" value={warningCount} />
-                    <StudioMini label="Safe" value={safeCount} />
-                    <StudioMini label="Total" value={totalCount} />
-                </div>
-            </div>
-        </motion.section>
-    );
-}
-
-function AttendanceTargetPanel({
-    value,
-    onChange,
-}: {
-    value: number;
-    onChange: (value: number) => void;
-}) {
-    return (
-        <motion.section
-            variants={sectionMotion}
-            initial="initial"
-            animate="animate"
-            className="studio-card p-5"
-        >
-            <div className="flex items-start justify-between gap-4">
-                <div>
-                    <p className="text-sm font-semibold text-slate-400">
-                        Attendance Target
-                    </p>
-
-                    <h2 className="mt-2 text-2xl font-black tracking-tight">
-                        {value}%
-                    </h2>
-
-                    <p className="mt-2 text-sm leading-6 text-slate-500">
-                        Change the target used for warnings, recovery, and safe skips.
-                    </p>
-                </div>
-
-                <StudioIconBubble icon={Target} tone="violet" />
-            </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-2">
-                {attendanceTargetOptions.map((option) => (
-                    <button
-                        key={option}
-                        type="button"
-                        onClick={() => onChange(option)}
-                        className={`rounded-2xl border px-4 py-3 text-sm font-black transition duration-300 ${value === option
-                            ? "border-white bg-white text-slate-950"
-                            : "border-white/[0.08] bg-white/[0.04] text-slate-400 hover:bg-white/[0.08] hover:text-white"
-                            }`}
-                    >
-                        {option}%
-                    </button>
-                ))}
-            </div>
-
-            <input
-                aria-label="Attendance target"
-                type="range"
-                min={50}
-                max={100}
-                step={1}
-                value={value}
-                onChange={(event) => onChange(Number(event.target.value))}
-                className="mt-5 h-2 w-full cursor-pointer appearance-none rounded-full bg-white/[0.1] accent-sky-200"
-            />
-        </motion.section>
     );
 }
 
