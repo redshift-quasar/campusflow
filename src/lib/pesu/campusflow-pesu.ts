@@ -135,13 +135,15 @@ export type SafePesuSyncResponse = {
     courses: SafePesuCourse[];
     timetable?: SafePesuTimetable;
     results?: SafePesuResults;
-    seating?: SafePesuSeating; calendar?: SafePesuCalendar;
+    seating?: SafePesuSeating;
+    calendar?: SafePesuCalendar;
     errors?: {
         attendance?: string | null;
         courses?: string | null;
         timetable?: string | null;
         results?: string | null;
         seating?: string | null;
+        calendar?: string | null;
     };
 };
 
@@ -166,6 +168,9 @@ function isSafeSyncResponse(value: unknown): value is SafePesuSyncResponse {
     const hasValidSeating =
         data.seating === undefined ||
         (Boolean(data.seating) && Array.isArray(data.seating.items));
+    const hasValidCalendar =
+        data.calendar === undefined ||
+        (Boolean(data.calendar) && Array.isArray(data.calendar.events));
 
     return (
         data.ok === true &&
@@ -175,7 +180,8 @@ function isSafeSyncResponse(value: unknown): value is SafePesuSyncResponse {
         Array.isArray(data.courses) &&
         timetableIsValid &&
         resultsIsValid &&
-        hasValidSeating
+        hasValidSeating &&
+        hasValidCalendar
     );
 }
 
@@ -228,6 +234,7 @@ export function savePesuSyncCache(data: SafePesuSyncResponse) {
         timetable: data.timetable,
         results: data.results,
         seating: data.seating,
+        calendar: data.calendar,
         errors: data.errors,
     };
 
@@ -274,4 +281,32 @@ export function mapPesuAttendanceToSubjects(
         total: subject.total,
         faculty: undefined,
     }));
+}
+
+export function mapPesuCoursesToAttendanceFallback(
+    courses: SafePesuCourse[]
+): AttendanceSubject[] {
+    const seen = new Set<string>();
+
+    return courses
+        .map((course, index) => {
+            const code = course.code?.trim() || `COURSE-${index + 1}`;
+            const name = course.name?.trim() || code;
+
+            return {
+                code,
+                name,
+                attended: 0,
+                total: 0,
+                faculty: undefined,
+            };
+        })
+        .filter((subject) => {
+            const key = subject.code || subject.name;
+
+            if (!key || seen.has(key)) return false;
+
+            seen.add(key);
+            return true;
+        });
 }

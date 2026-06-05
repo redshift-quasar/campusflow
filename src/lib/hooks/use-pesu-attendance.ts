@@ -15,17 +15,22 @@ import {
     clearPesuSyncCache,
     getPesuSyncCache,
     mapPesuAttendanceToSubjects,
+    mapPesuCoursesToAttendanceFallback,
     PESU_SYNC_CACHE_KEY,
 } from "@/lib/pesu/campusflow-pesu";
 
 export type PesuLoadState = "loading" | "ready" | "error";
 export type PesuDataSource = "demo" | "pesu";
+export type PesuAttendanceMode = "live" | "manual-fallback" | "demo";
 
 type PesuAttendanceSnapshot = {
     subjects: AttendanceSubject[];
     loadState: PesuLoadState;
     syncedAt: string;
     source: PesuDataSource;
+    mode: PesuAttendanceMode;
+    liveAvailable: boolean;
+    message: string;
     error: string;
 };
 
@@ -33,8 +38,13 @@ type PesuAttendanceApiResponse = {
     source?: string;
     syncedAt?: string;
     subjects?: AttendanceSubject[];
-    error?: string;
+    liveAvailable?: boolean;
+    mode?: PesuAttendanceMode;
     message?: string;
+    errors?: {
+        attendance?: string | null;
+    };
+    error?: string;
 };
 
 const PESU_SYNC_EVENT = "campusflow_pesu_sync_changed";
@@ -44,6 +54,9 @@ const SERVER_SNAPSHOT: PesuAttendanceSnapshot = {
     loadState: "ready",
     syncedAt: "",
     source: "demo",
+    mode: "demo",
+    liveAvailable: false,
+    message: "",
     error: "",
 };
 
@@ -85,12 +98,22 @@ function getSnapshot(): PesuAttendanceSnapshot {
         return cachedSnapshot;
     }
 
+    const liveSubjects = mapPesuAttendanceToSubjects(safeCache.attendance);
+    const liveAvailable = liveSubjects.length > 0;
+
     cachedSnapshot = {
-        subjects: mapPesuAttendanceToSubjects(safeCache.attendance),
+        subjects: liveAvailable
+            ? liveSubjects
+            : mapPesuCoursesToAttendanceFallback(safeCache.courses),
         loadState: "ready",
         syncedAt: safeCache.syncedAt,
         source: "pesu",
-        error: "",
+        mode: liveAvailable ? "live" : "manual-fallback",
+        liveAvailable,
+        message: liveAvailable
+            ? ""
+            : "Attendance is not available on PESU yet. Add your attendance manually.",
+        error: safeCache.errors?.attendance ?? "",
     };
 
     return cachedSnapshot;
@@ -109,6 +132,10 @@ export function usePesuAttendance() {
     const {
         attendance: sessionAttendance,
         syncedAt: sessionSyncedAt,
+        connected: sessionConnected,
+        source: sessionSource,
+        courses: sessionCourses,
+        errors: sessionErrors,
     } = usePesuSession();
     const autoSync = useSettingsStore((state) => state.autoSync);
     const [serverState, setServerState] = useState<PesuAttendanceSnapshot | null>(
@@ -144,7 +171,10 @@ export function usePesuAttendance() {
                 loadState: "ready",
                 syncedAt: data.syncedAt ?? new Date().toISOString(),
                 source: "pesu",
-                error: "",
+                mode: data.mode ?? (data.liveAvailable ? "live" : "manual-fallback"),
+                liveAvailable: Boolean(data.liveAvailable),
+                message: data.message ?? "",
+                error: data.errors?.attendance ?? "",
             });
         } catch (error) {
             const message =
@@ -183,16 +213,48 @@ export function usePesuAttendance() {
     }, [refreshFromServer]);
 
     const sessionState = useMemo<PesuAttendanceSnapshot | null>(() => {
-        if (!sessionAttendance.length) return null;
+        const liveSubjects = mapPesuAttendanceToSubjects(sessionAttendance);
+        const liveAvailable = liveSubjects.length > 0;
+        const fallbackSubjects = liveAvailable
+            ? []
+            : mapPesuCoursesToAttendanceFallback(sessionCourses);
+
+        if (
+            !sessionConnected &&
+            !liveSubjects.length &&
+            !fallbackSubjects.length
+        ) {
+            return null;
+        }
+
+        if (
+            sessionSource !== "pesu" &&
+            !liveSubjects.length &&
+            !fallbackSubjects.length
+        ) {
+            return null;
+        }
 
         return {
-            subjects: mapPesuAttendanceToSubjects(sessionAttendance),
+            subjects: liveAvailable ? liveSubjects : fallbackSubjects,
             loadState: "ready",
             syncedAt: sessionSyncedAt,
             source: "pesu",
-            error: "",
+            mode: liveAvailable ? "live" : "manual-fallback",
+            liveAvailable,
+            message: liveAvailable
+                ? ""
+                : "Attendance is not available on PESU yet. Add your attendance manually.",
+            error: sessionErrors?.attendance ?? "",
         };
-    }, [sessionAttendance, sessionSyncedAt]);
+    }, [
+        sessionAttendance,
+        sessionConnected,
+        sessionCourses,
+        sessionErrors?.attendance,
+        sessionSource,
+        sessionSyncedAt,
+    ]);
 
     const state = sessionState ?? serverState ?? localState;
 
@@ -201,6 +263,9 @@ export function usePesuAttendance() {
         loadState: state.loadState,
         syncedAt: state.syncedAt,
         source: state.source,
+        mode: state.mode,
+        liveAvailable: state.liveAvailable,
+        message: state.message,
         error: state.error,
         syncAttendance,
         resetAttendanceCache,

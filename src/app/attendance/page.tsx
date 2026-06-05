@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, Suspense } from "react";
+import { useEffect, useMemo, Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -22,6 +22,7 @@ import { cardMotion, sectionMotion, staggerContainer } from "@/lib/motion";
 import { useLocalAuth } from "@/lib/hooks/use-local-auth";
 import { usePesuAttendance } from "@/lib/hooks/use-pesu-attendance";
 import { usePesuTimetable } from "@/lib/hooks/use-pesu-timetable";
+import { useAttendanceStore } from "@/lib/store/attendance-store";
 import { useSettingsStore } from "@/lib/store/settings-store";
 import { calendarEvents } from "@/lib/demo-data";
 import {
@@ -70,14 +71,50 @@ function AttendanceContent() {
     const semesterEndDate = useSettingsStore((state) => state.semesterEndDate);
 
     const {
-        subjects,
+        subjects: syncedSubjects,
         syncedAt,
         source,
+        mode,
+        message,
+        error,
         syncAttendance,
         resetAttendanceCache,
         usingDemoData,
     } = usePesuAttendance();
     const { slots: timetableSlots } = usePesuTimetable();
+    const manualByCode = useAttendanceStore((state) => state.manualByCode);
+    const setManualSubjectAttendance = useAttendanceStore(
+        (state) => state.setManualSubjectAttendance
+    );
+    const resetManualAttendance = useAttendanceStore(
+        (state) => state.resetManualAttendance
+    );
+    const [manualResetVersion, setManualResetVersion] = useState(0);
+    const isManualFallback = mode === "manual-fallback";
+    const subjects = useMemo(
+        () =>
+            syncedSubjects.map((subject) => {
+                if (!isManualFallback) return subject;
+
+                const manual = manualByCode[subject.code];
+
+                if (!manual) return subject;
+
+                return {
+                    ...subject,
+                    attended: manual.attended,
+                    total: manual.total,
+                };
+            }),
+        [isManualFallback, manualByCode, syncedSubjects]
+    );
+    const measuredSubjects = useMemo(
+        () =>
+            isManualFallback
+                ? subjects.filter((subject) => subject.total > 0)
+                : subjects,
+        [isManualFallback, subjects]
+    );
 
     const excludedDates = useMemo(
         () =>
@@ -127,29 +164,31 @@ function AttendanceContent() {
         timetableSlots,
     ]);
 
-    const lowSubjects = getLowAttendanceSubjects(subjects, attendanceTarget);
-    const warningSubjects = getWarningSubjects(subjects, attendanceTarget);
-    const safeSubjects = getSafeSubjects(subjects, attendanceTarget);
-    const criticalSubject = getCriticalSubject(subjects, attendanceTarget);
+    const lowSubjects = getLowAttendanceSubjects(measuredSubjects, attendanceTarget);
+    const warningSubjects = getWarningSubjects(measuredSubjects, attendanceTarget);
+    const safeSubjects = getSafeSubjects(measuredSubjects, attendanceTarget);
+    const criticalSubject = getCriticalSubject(measuredSubjects, attendanceTarget);
 
     const averageAttendance =
-        subjects.length > 0
+        measuredSubjects.length > 0
             ? Number(
                 (
-                    subjects.reduce(
+                    measuredSubjects.reduce(
                         (sum, subject) => sum + getAttendancePercent(subject),
                         0
-                    ) / subjects.length
+                    ) / measuredSubjects.length
                 ).toFixed(2)
             )
             : 0;
 
     const statusTone: Tone =
-        lowSubjects.length > 0
-            ? "red"
-            : warningSubjects.length > 0
-                ? "orange"
-                : "green";
+        isManualFallback && measuredSubjects.length === 0
+            ? "slate"
+            : lowSubjects.length > 0
+                ? "red"
+                : warningSubjects.length > 0
+                    ? "orange"
+                    : "green";
 
     return (
         <DashboardShell
@@ -159,15 +198,25 @@ function AttendanceContent() {
             <div className="main-shine-surface mx-auto max-w-7xl space-y-6 rounded-[2.5rem]">
                 <motion.div variants={sectionMotion} initial="initial" animate="animate">
                     <StudioHero
-                        badge={source === "pesu" ? "CampusFlow / PESU Live" : "CampusFlow / Demo Preview"}
+                        badge={
+                            isManualFallback
+                                ? "CampusFlow / Manual Mode"
+                                : source === "pesu"
+                                    ? "CampusFlow / PESU Live"
+                                    : "CampusFlow / Demo Preview"
+                        }
                         title="Attendance,"
                         mutedTitle="decoded clearly."
-                        description="Track subject-wise attendance, danger subjects, recovery classes, safe skips, and semester-end projection from one clean workspace."
+                        description={
+                            isManualFallback
+                                ? "PESU has not published attendance yet, so your synced course list is ready for manual tracking."
+                                : "Track subject-wise attendance, danger subjects, recovery classes, safe skips, and semester-end projection from one clean workspace."
+                        }
                     >
                         <AttendanceHeroCard
                             average={averageAttendance}
                             target={attendanceTarget}
-                            source={source}
+                            source={isManualFallback ? "manual-fallback" : source}
                             syncedAt={syncedAt}
                             lowCount={lowSubjects.length}
                             onRefresh={syncAttendance}
@@ -206,6 +255,37 @@ function AttendanceContent() {
                     </motion.section>
                 )}
 
+                {isManualFallback && (
+                    <ManualModeNotice
+                        message={
+                            message ||
+                            "Attendance is not available on PESU yet. We created subjects from your synced courses. Enter attended/total manually for now."
+                        }
+                        enteredCount={measuredSubjects.length}
+                        totalCount={subjects.length}
+                        onClear={() => {
+                            resetManualAttendance();
+                            setManualResetVersion((version) => version + 1);
+                        }}
+                    />
+                )}
+
+                {error && !isManualFallback && !usingDemoData && (
+                    <motion.section
+                        variants={sectionMotion}
+                        initial="initial"
+                        animate="animate"
+                        className="rounded-[2rem] border border-red-300/20 bg-red-300/[0.08] p-5 shadow-2xl shadow-black/20 backdrop-blur-2xl"
+                    >
+                        <h2 className="text-lg font-black text-red-100">
+                            Attendance refresh needs attention
+                        </h2>
+                        <p className="mt-1 text-sm leading-6 text-red-100/75">
+                            {error}
+                        </p>
+                    </motion.section>
+                )}
+
                 <motion.section
                     variants={staggerContainer(0.08)}
                     initial="initial"
@@ -215,7 +295,11 @@ function AttendanceContent() {
                     <MetricCard
                         label="Average"
                         value={`${averageAttendance}%`}
-                        detail={`Across ${subjects.length} subjects`}
+                        detail={
+                            isManualFallback
+                                ? `${measuredSubjects.length}/${subjects.length} subjects entered`
+                                : `Across ${subjects.length} subjects`
+                        }
                         icon={BarChart3}
                         tone={statusTone}
                     />
@@ -262,15 +346,21 @@ function AttendanceContent() {
                                 variants={staggerContainer(0.075)}
                                 initial="initial"
                                 animate="animate"
-                                className="mt-5 grid gap-3"
+                                className="mt-5 grid gap-3 lg:grid-cols-2"
                             >
                                 {subjectsWithPrediction.map((item) => (
                                     <AttendanceSubjectCard
-                                        key={item.subject.code}
+                                        key={
+                                            isManualFallback
+                                                ? `${manualResetVersion}-${item.subject.code}`
+                                                : item.subject.code
+                                        }
                                         subject={item.subject}
                                         target={attendanceTarget}
                                         remainingClasses={item.remainingClasses}
                                         highlighted={item.subject.code === subjectParam}
+                                        manualMode={isManualFallback}
+                                        onManualChange={setManualSubjectAttendance}
                                     />
                                 ))}
                             </motion.div>
@@ -293,7 +383,27 @@ function AttendanceContent() {
                                 animate="animate"
                                 className="mt-5 grid gap-3 md:grid-cols-2"
                             >
-                                {lowSubjects.length > 0 ? (
+                                {isManualFallback && measuredSubjects.length === 0 ? (
+                                    <motion.div
+                                        variants={cardMotion}
+                                        className="rounded-[1.5rem] border border-sky-300/20 bg-sky-300/[0.07] p-5 md:col-span-2"
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            <StudioIconBubble icon={CalendarDays} tone="blue" />
+
+                                            <div>
+                                                <h3 className="text-lg font-black text-sky-100">
+                                                    No attendance published yet
+                                                </h3>
+
+                                                <p className="mt-2 text-sm leading-6 text-sky-100/70">
+                                                    Enter attended and total classes in the subject cards to
+                                                    start seeing recovery and bunk guidance.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                ) : lowSubjects.length > 0 ? (
                                     lowSubjects.map((subject) => (
                                         <FocusSubjectCard
                                             key={subject.code}
@@ -348,7 +458,9 @@ function AttendanceContent() {
                                             ? `${criticalSubject.code} • ${getAttendancePercent(
                                                 criticalSubject
                                             )}% attendance`
-                                            : "No attendance data available."}
+                                            : isManualFallback
+                                                ? "Enter manual attendance to identify the riskiest subject."
+                                                : "No attendance data available."}
                                     </p>
                                 </div>
 
@@ -374,7 +486,14 @@ function AttendanceContent() {
                                 <StudioMini label="Low" value={lowSubjects.length} />
                                 <StudioMini label="Warning" value={warningSubjects.length} />
                                 <StudioMini label="Safe" value={safeSubjects.length} />
-                                <StudioMini label="Total" value={subjects.length} />
+                                <StudioMini
+                                    label={isManualFallback ? "Entered" : "Total"}
+                                    value={
+                                        isManualFallback
+                                            ? `${measuredSubjects.length}/${subjects.length}`
+                                            : subjects.length
+                                    }
+                                />
                             </div>
                         </motion.section>
 
@@ -390,8 +509,20 @@ function AttendanceContent() {
                                 <InfoPill
                                     icon={source === "pesu" ? CheckCircle2 : AlertTriangle}
                                     label="Source"
-                                    value={source === "pesu" ? "PESU Academy" : "Demo Data"}
-                                    tone={source === "pesu" ? "green" : "orange"}
+                                    value={
+                                        isManualFallback
+                                            ? "Manual mode"
+                                            : source === "pesu"
+                                                ? "PESU Academy"
+                                                : "Demo Data"
+                                    }
+                                    tone={
+                                        isManualFallback
+                                            ? "blue"
+                                            : source === "pesu"
+                                                ? "green"
+                                                : "orange"
+                                    }
                                 />
 
                                 <InfoPill
@@ -493,7 +624,14 @@ function AttendanceHeroCard({
     onRefresh: () => void;
     onReset: () => void;
 }) {
-    const tone: Tone = average >= target ? "green" : average >= target - 5 ? "orange" : "red";
+    const tone: Tone =
+        source === "manual-fallback"
+            ? "slate"
+            : average >= target
+                ? "green"
+                : average >= target - 5
+                    ? "orange"
+                    : "red";
 
     return (
         <div className="studio-card-soft p-5">
@@ -539,11 +677,64 @@ function AttendanceHeroCard({
             </div>
 
             <p className="mt-3 text-xs leading-5 text-slate-500">
-                {source === "pesu"
-                    ? `Synced ${syncedAt ? new Date(syncedAt).toLocaleString() : "recently"}`
-                    : "Showing fallback demo data"}
+                {source === "manual-fallback"
+                    ? `Manual mode${syncedAt ? ` from synced courses on ${new Date(syncedAt).toLocaleString()}` : ""}`
+                    : source === "pesu"
+                        ? `Synced ${syncedAt ? new Date(syncedAt).toLocaleString() : "recently"}`
+                        : "Showing fallback demo data"}
             </p>
         </div>
+    );
+}
+
+function ManualModeNotice({
+    message,
+    enteredCount,
+    totalCount,
+    onClear,
+}: {
+    message: string;
+    enteredCount: number;
+    totalCount: number;
+    onClear: () => void;
+}) {
+    return (
+        <motion.section
+            variants={sectionMotion}
+            initial="initial"
+            animate="animate"
+            className="rounded-[2rem] border border-sky-300/20 bg-sky-300/[0.07] p-4 shadow-2xl shadow-black/20 backdrop-blur-2xl"
+        >
+            <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-sky-300/10 px-3 py-1 text-xs font-black uppercase tracking-[0.14em] text-sky-100">
+                            Manual Mode
+                        </span>
+                        <span className="rounded-full bg-white/[0.055] px-3 py-1 text-xs font-black text-slate-400">
+                            {enteredCount}/{totalCount} entered
+                        </span>
+                    </div>
+
+                    <h2 className="mt-3 text-lg font-black text-sky-100">
+                        No attendance published yet
+                    </h2>
+
+                    <p className="mt-1 max-w-3xl text-sm leading-6 text-sky-100/75">
+                        {message}
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={onClear}
+                    disabled={enteredCount === 0}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-white/[0.075] px-4 py-3 text-sm font-black text-slate-300 transition hover:bg-white/[0.1] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                    Reset manual values
+                </button>
+            </div>
+        </motion.section>
     );
 }
 
@@ -552,17 +743,36 @@ function AttendanceSubjectCard({
     target,
     remainingClasses,
     highlighted,
+    manualMode = false,
+    onManualChange,
 }: {
     subject: AttendanceSubject;
     target: number;
     remainingClasses: number;
     highlighted?: boolean;
+    manualMode?: boolean;
+    onManualChange?: (code: string, attended: number, total: number) => void;
 }) {
     const percent = getAttendancePercent(subject);
-    const tone = getAttendanceTone(subject, target);
-    const progressTone = tone === "safe" ? "green" : tone === "warning" ? "orange" : "red";
-    const advice = getProjectedAttendanceAdvice(subject, target, remainingClasses);
-    const toneClasses = getToneClasses(progressTone);
+    const manualPending = manualMode && subject.total <= 0;
+    const tone = manualPending ? "manual" : getAttendanceTone(subject, target);
+    const progressTone: ProgressTone =
+        tone === "safe"
+            ? "green"
+            : tone === "warning"
+                ? "orange"
+                : tone === "manual"
+                    ? "green"
+                    : "red";
+    const advice = manualPending
+        ? null
+        : getProjectedAttendanceAdvice(subject, target, remainingClasses);
+    const toneClasses = manualPending
+        ? {
+            glow: "bg-slate-300/10",
+            chip: "bg-slate-300/10 text-slate-300",
+        }
+        : getToneClasses(progressTone);
 
     return (
         <motion.div
@@ -582,7 +792,7 @@ function AttendanceSubjectCard({
                 className={`absolute -right-14 -top-14 h-32 w-32 rounded-full blur-3xl transition duration-500 group-hover:scale-125 ${toneClasses.glow}`}
             />
 
-            <div className="relative z-10 grid gap-5 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-center">
+            <div className="relative z-10 grid gap-4">
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                         <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-600">
@@ -601,11 +811,15 @@ function AttendanceSubjectCard({
                     </h3>
 
                     <p className="mt-1 text-sm font-semibold text-slate-500">
-                        {subject.attended}/{subject.total} classes attended
+                        {manualPending
+                            ? "Waiting for manual values"
+                            : `${subject.attended}/${subject.total} classes attended`}
                     </p>
 
                     <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">
-                        {advice.message}
+                        {manualPending
+                            ? "Enter attended and total classes to unlock predictions."
+                            : advice?.message}
                     </p>
                 </div>
 
@@ -625,14 +839,130 @@ function AttendanceSubjectCard({
                     </div>
 
                     <div className="mt-4 grid grid-cols-3 gap-2">
-                        <MiniBox label="Need" value={advice.classesNeeded} />
-                        <MiniBox label="Skips" value={advice.remainingSkips} />
-                        <MiniBox label="Left" value={advice.remainingClasses} />
+                        <MiniBox label="Need" value={advice?.classesNeeded ?? "-"} />
+                        <MiniBox label="Skips" value={advice?.remainingSkips ?? "-"} />
+                        <MiniBox label="Left" value={advice?.remainingClasses ?? "-"} />
                     </div>
                 </div>
+
+                {manualMode && onManualChange && (
+                    <ManualAttendanceInputs
+                        key={subject.code}
+                        subject={subject}
+                        onChange={onManualChange}
+                    />
+                )}
             </div>
         </motion.div>
     );
+}
+
+function ManualAttendanceInputs({
+    subject,
+    onChange,
+}: {
+    subject: AttendanceSubject;
+    onChange: (code: string, attended: number, total: number) => void;
+}) {
+    const [attendedValue, setAttendedValue] = useState(String(subject.attended));
+    const [totalValue, setTotalValue] = useState(String(subject.total));
+    const validation = getManualAttendanceValidation(attendedValue, totalValue);
+
+    function updateValues(nextAttended: string, nextTotal: string) {
+        const nextValidation = getManualAttendanceValidation(
+            nextAttended,
+            nextTotal
+        );
+
+        if (!nextValidation) {
+            onChange(subject.code, Number(nextAttended), Number(nextTotal));
+        }
+    }
+
+    return (
+        <div className="rounded-[1.25rem] border border-white/[0.06] bg-black/15 p-3">
+            <div className="grid grid-cols-2 gap-3">
+                <label>
+                    <span className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">
+                        Attended
+                    </span>
+                    <input
+                        value={attendedValue}
+                        onChange={(event) => {
+                            const nextValue = event.target.value;
+                            setAttendedValue(nextValue);
+                            updateValues(nextValue, totalValue);
+                        }}
+                        type="number"
+                        min={0}
+                        step={1}
+                        className={`w-full rounded-xl border bg-white/[0.045] px-3 py-2 text-sm font-black text-white outline-none transition ${validation
+                            ? "border-red-300/40 focus:border-red-300/60"
+                            : "border-white/[0.07] focus:border-sky-300/30"
+                            }`}
+                    />
+                </label>
+
+                <label>
+                    <span className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">
+                        Total
+                    </span>
+                    <input
+                        value={totalValue}
+                        onChange={(event) => {
+                            const nextValue = event.target.value;
+                            setTotalValue(nextValue);
+                            updateValues(attendedValue, nextValue);
+                        }}
+                        type="number"
+                        min={0}
+                        step={1}
+                        className={`w-full rounded-xl border bg-white/[0.045] px-3 py-2 text-sm font-black text-white outline-none transition ${validation
+                            ? "border-red-300/40 focus:border-red-300/60"
+                            : "border-white/[0.07] focus:border-sky-300/30"
+                            }`}
+                    />
+                </label>
+            </div>
+
+            {validation ? (
+                <p className="mt-2 text-xs font-bold leading-5 text-red-200">
+                    {validation}
+                </p>
+            ) : (
+                <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
+                    Manual values are saved locally and kept separate from PESU sync.
+                </p>
+            )}
+        </div>
+    );
+}
+
+function getManualAttendanceValidation(attendedValue: string, totalValue: string) {
+    if (!attendedValue.trim() || !totalValue.trim()) {
+        return "Enter attended and total classes.";
+    }
+
+    const attended = Number(attendedValue);
+    const total = Number(totalValue);
+
+    if (!Number.isFinite(attended) || !Number.isFinite(total)) {
+        return "Values must be valid numbers.";
+    }
+
+    if (!Number.isInteger(attended) || !Number.isInteger(total)) {
+        return "Values must be whole numbers.";
+    }
+
+    if (attended < 0 || total < 0) {
+        return "Values cannot be negative.";
+    }
+
+    if (attended > total) {
+        return "Attended classes cannot exceed total classes.";
+    }
+
+    return "";
 }
 
 function FocusSubjectCard({
