@@ -4,7 +4,9 @@ import { motion } from "framer-motion";
 import {
     AlertTriangle,
     BarChart3,
+    CalendarDays,
     CalendarX2,
+    Clock3,
     ShieldCheck,
     TrendingDown,
     Umbrella,
@@ -27,6 +29,9 @@ type AttendanceBunkSummaryProps = {
         drop: number;
     } | null;
     approximateMode: boolean;
+    remainingWorkingDays: number;
+    calendarModeLabel: string;
+    totalEstimatedRemainingClasses: number;
 };
 
 export function AttendanceBunkSummary({
@@ -40,6 +45,9 @@ export function AttendanceBunkSummary({
     unrecoverableCount,
     biggestDropSubject,
     approximateMode,
+    remainingWorkingDays,
+    calendarModeLabel,
+    totalEstimatedRemainingClasses,
 }: AttendanceBunkSummaryProps) {
     return (
         <section className="rounded-[1.8rem] border border-white/[0.07] bg-white/[0.03] p-4 sm:p-5">
@@ -55,7 +63,7 @@ export function AttendanceBunkSummary({
 
                 {approximateMode && (
                     <span className="rounded-full bg-sky-300/10 px-3 py-1.5 text-xs font-black text-sky-100">
-                        Approximate prediction — timetable mapping is not available
+                        Approximate prediction - timetable mapping is not available
                     </span>
                 )}
             </div>
@@ -100,6 +108,20 @@ export function AttendanceBunkSummary({
                     detail="From selected dates"
                     icon={Umbrella}
                     tone={totalMissedClasses > 0 ? "red" : "slate"}
+                />
+                <MetricCard
+                    label="Working Days"
+                    value={remainingWorkingDays}
+                    detail="Sundays and blocked dates excluded"
+                    icon={CalendarDays}
+                    tone="sky"
+                />
+                <MetricCard
+                    label="Calendar"
+                    value={calendarModeLabel}
+                    detail={`${totalEstimatedRemainingClasses} estimated remaining classes`}
+                    icon={Clock3}
+                    tone="slate"
                 />
                 <MetricCard
                     label="Safe"

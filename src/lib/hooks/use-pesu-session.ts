@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
     clearPesuSyncCache,
     type SafePesuAttendanceSubject,
+    type SafePesuCalendar,
     type SafePesuCourse,
     type SafePesuProfile,
     type SafePesuResults,
@@ -26,6 +27,7 @@ export type PesuSession = {
     timetable?: SafePesuTimetable;
     results?: SafePesuResults;
     seating?: SafePesuSeating;
+    calendar?: SafePesuCalendar;
     errors?: SafePesuSyncResponse["errors"];
     data?: SafePesuSyncResponse;
 };
@@ -66,6 +68,7 @@ function normalizeSessionResponse(data: PesuSessionApiResponse): PesuSession {
         timetable: data.timetable ?? safeData?.timetable,
         results: data.results ?? safeData?.results,
         seating: data.seating ?? safeData?.seating ?? { items: [] },
+        calendar: data.calendar ?? safeData?.calendar,
         errors: data.errors ?? safeData?.errors,
         data: safeData,
     };
@@ -190,6 +193,7 @@ export function usePesuSession() {
         timetable: session.timetable,
         results: session.results,
         seating: session.seating,
+        calendar: session.calendar,
         errors: session.errors,
         isLoading,
         isSubmitting,

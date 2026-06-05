@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, Database, RefreshCw, RotateCcw } from "lucide-react";
+import { Database, RotateCcw } from "lucide-react";
 
 import { AttendanceBunkSummary } from "@/components/predictor/AttendanceBunkSummary";
 import { AttendancePredictorForm } from "@/components/predictor/AttendancePredictorForm";
@@ -11,7 +11,7 @@ import { AttendancePredictorSetup } from "@/components/predictor/AttendancePredi
 import { AttendancePredictorSummary } from "@/components/predictor/AttendancePredictorSummary";
 import { AttendanceSubjectPredictorCard } from "@/components/predictor/AttendanceSubjectPredictorCard";
 import { BunkCalendar } from "@/components/predictor/BunkCalendar";
-import { StudioIconBubble, StudioInfoBox } from "@/components/studio/Studio";
+import { StudioIconBubble } from "@/components/studio/Studio";
 import {
     clampPercent,
     getAttendancePercent,
@@ -24,13 +24,16 @@ import {
     type PredictorAttendanceSubject,
 } from "@/lib/attendance-predictor";
 import {
+    getDateRange,
     getRemainingCalendarDays,
     parseDateKey,
     toDateKey,
 } from "@/lib/attendance-calendar";
 import { usePesuAttendance } from "@/lib/hooks/use-pesu-attendance";
+import { usePesuSession } from "@/lib/hooks/use-pesu-session";
 import { usePesuTimetable } from "@/lib/hooks/use-pesu-timetable";
-import { sectionMotion, staggerContainer } from "@/lib/motion";
+import { staggerContainer } from "@/lib/motion";
+import { useAttendanceStore } from "@/lib/store/attendance-store";
 
 const MANUAL_STORAGE_KEY = "campusflow:attendance-predictor-subjects";
 const SETTINGS_STORAGE_KEY = "campusflow:predictor-settings";
@@ -227,28 +230,54 @@ function sortDateKeys(dateKeys: string[]) {
     return Array.from(new Set(dateKeys)).sort();
 }
 
+function getManualSubjectKey(subject: PredictorAttendanceSubject) {
+    return subject.code?.trim() || subject.id;
+}
+
 export function AttendancePredictor() {
     const {
         subjects,
         source,
         syncedAt,
-        loadState,
-        error,
-        syncAttendance,
+        mode,
     } = usePesuAttendance();
+    const { calendar } = usePesuSession();
     const { slots: timetableSlots, source: timetableSource } = usePesuTimetable();
+    const manualByCode = useAttendanceStore((state) => state.manualByCode);
+    const setManualSubjectAttendance = useAttendanceStore(
+        (state) => state.setManualSubjectAttendance
+    );
     const todayKey = toDateKey(new Date());
-    const liveSubjects = useMemo(
+    const syncedSubjectsRaw = useMemo(
         () =>
             source === "pesu"
                 ? normalizePredictorAttendanceSubjects(subjects)
                 : [],
         [source, subjects]
     );
-    const hasLiveData = liveSubjects.length > 0;
+    const isManualFallback = mode === "manual-fallback";
+    const syncedSubjects = useMemo(
+        () =>
+            syncedSubjectsRaw.map((subject) => {
+                if (!isManualFallback) return subject;
+
+                const manual = manualByCode[getManualSubjectKey(subject)];
+
+                if (!manual) return subject;
+
+                return {
+                    ...subject,
+                    attended: manual.attended,
+                    total: Math.max(manual.total, manual.attended),
+                };
+            }),
+        [isManualFallback, manualByCode, syncedSubjectsRaw]
+    );
+    const hasSyncedSubjects = source === "pesu" && syncedSubjects.length > 0;
     const [target, setTarget] = useState(75);
     const [customTarget, setCustomTarget] = useState("75");
     const [semesterEndDate, setSemesterEndDate] = useState("");
+    const [calendarPrefillApplied, setCalendarPrefillApplied] = useState(false);
     const [blockedDateInput, setBlockedDateInput] = useState("");
     const [blockedDateError, setBlockedDateError] = useState("");
     const [blockedDateKeys, setBlockedDateKeys] = useState<string[]>([]);
@@ -310,9 +339,87 @@ export function AttendancePredictor() {
         50
     );
     const semesterError = getSemesterError(semesterEndDate, todayKey);
-    const semesterEnd = semesterEndDate ? parseDateKey(semesterEndDate) : null;
+    const calendarUsable = Boolean(
+        calendar?.source === "pesu-academy" &&
+        calendar?.usableForPrediction &&
+        calendar.calendarStatus !== "past"
+    );
+    const calendarEndDate = calendarUsable && calendar?.endDate ? calendar.endDate : "";
+    const calendarBlockedDateKeys = useMemo(
+        () =>
+            calendarUsable
+                ? sortDateKeys(
+                    (calendar?.blockedDateKeys ?? []).filter(
+                        (dateKey): dateKey is string => typeof dateKey === "string"
+                    )
+                )
+                : [],
+        [calendar?.blockedDateKeys, calendarUsable]
+    );
+    const mergedBlockedDateKeys = useMemo(
+        () => sortDateKeys([...blockedDateKeys, ...calendarBlockedDateKeys]),
+        [blockedDateKeys, calendarBlockedDateKeys]
+    );
+    const sundayDateKeys = useMemo(() => {
+        const parsedSemesterEnd = semesterEndDate
+            ? parseDateKey(semesterEndDate)
+            : null;
+
+        if (!parsedSemesterEnd || semesterError) return [];
+
+        return getDateRange(new Date(), parsedSemesterEnd)
+            .filter((date) => date.getDay() === 0)
+            .map(toDateKey)
+            .filter(Boolean);
+    }, [semesterEndDate, semesterError]);
+    const effectiveBlockedDateKeys = useMemo(
+        () => sortDateKeys([...mergedBlockedDateKeys, ...sundayDateKeys]),
+        [mergedBlockedDateKeys, sundayDateKeys]
+    );
+    const calendarModeLabel =
+        calendarEndDate && semesterEndDate === calendarEndDate
+            ? "PESU Calendar"
+            : semesterEndDate
+                ? "Manual Date"
+                : "Estimate";
+
+    useEffect(() => {
+        if (
+            !hydrated ||
+            calendarPrefillApplied ||
+            !calendarEndDate
+        ) {
+            return;
+        }
+
+        let cancelled = false;
+
+        queueMicrotask(() => {
+            if (cancelled) return;
+
+            if (semesterEndDate !== calendarEndDate) {
+                setSemesterEndDate(calendarEndDate);
+            }
+
+            setCalendarPrefillApplied(true);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        calendarEndDate,
+        calendarPrefillApplied,
+        hydrated,
+        semesterEndDate,
+    ]);
+
     const remainingDays = useMemo(() => {
-        if (!semesterEnd || semesterError) {
+        const parsedSemesterEnd = semesterEndDate
+            ? parseDateKey(semesterEndDate)
+            : null;
+
+        if (!parsedSemesterEnd || semesterError) {
             return {
                 totalDays: 0,
                 academicDays: 0,
@@ -322,14 +429,15 @@ export function AttendancePredictor() {
 
         return getRemainingCalendarDays({
             fromDate: new Date(),
-            semesterEndDate: semesterEnd,
-            blockedDateKeys,
+            semesterEndDate: parsedSemesterEnd,
+            blockedDateKeys: mergedBlockedDateKeys,
+            excludeSundays: true,
         });
-    }, [blockedDateKeys, semesterEnd, semesterError]);
+    }, [mergedBlockedDateKeys, semesterEndDate, semesterError]);
     const validBunkDateKeys = useMemo(() => {
         if (!semesterEndDate || semesterError) return [];
 
-        const blockedSet = new Set(blockedDateKeys);
+        const blockedSet = new Set(effectiveBlockedDateKeys);
 
         return sortDateKeys(
             bunkDateKeys.filter(
@@ -337,9 +445,15 @@ export function AttendancePredictor() {
                     dateKey >= todayKey &&
                     dateKey <= semesterEndDate &&
                     !blockedSet.has(dateKey)
-            )
+                )
         );
-    }, [blockedDateKeys, bunkDateKeys, semesterEndDate, semesterError, todayKey]);
+    }, [
+        bunkDateKeys,
+        effectiveBlockedDateKeys,
+        semesterEndDate,
+        semesterError,
+        todayKey,
+    ]);
     const defaultRemaining = useMemo(
         () =>
             defaultRemainingClassesError
@@ -354,18 +468,38 @@ export function AttendancePredictor() {
                 : safeClassCount(fallbackClassesPerBunkDay),
         [fallbackClassesPerBunkDay, fallbackClassesPerBunkDayError]
     );
-    const activeSubjects = hasLiveData ? liveSubjects : manualSubjects;
-    const dataLabel = hasLiveData ? "PESU Live" : "Manual fallback";
+    const activeSubjects = hasSyncedSubjects ? syncedSubjects : manualSubjects;
+    const showLivePlanningTools = mode === "live" && hasSyncedSubjects;
+    const dataLabel =
+        mode === "live"
+            ? "PESU Live"
+            : hasSyncedSubjects && isManualFallback
+                ? "Manual from Courses"
+                : "Manual fallback";
     const canUseTimetableMapping =
-        hasLiveData && timetableSource === "pesu" && timetableSlots.length > 0;
+        showLivePlanningTools &&
+        timetableSource === "pesu" &&
+        timetableSlots.length > 0;
+    const activeBunkDateKeys = useMemo(
+        () => (showLivePlanningTools ? validBunkDateKeys : []),
+        [showLivePlanningTools, validBunkDateKeys]
+    );
     const approximateMode =
-        validBunkDateKeys.length > 0 && !canUseTimetableMapping;
+        activeBunkDateKeys.length > 0 && !canUseTimetableMapping;
     const remainingEstimate =
         defaultRemaining !== undefined
             ? defaultRemaining
             : semesterEndDate && !semesterError
                 ? remainingDays.academicDays
                 : undefined;
+    const planningRemainingEstimate = showLivePlanningTools
+        ? remainingEstimate
+        : undefined;
+    const totalEstimatedRemainingClasses = activeSubjects.reduce(
+        (sum, subject) =>
+            sum + (subject.remainingClasses ?? planningRemainingEstimate ?? 0),
+        0
+    );
 
     useEffect(() => {
         if (!hydrated) return;
@@ -398,7 +532,7 @@ export function AttendancePredictor() {
     const calendarSimulation = useMemo(() => {
         return simulateCalendarBunkPlan({
             subjects: activeSubjects,
-            bunkDateKeys: validBunkDateKeys,
+            bunkDateKeys: activeBunkDateKeys,
             target,
             getClassesForDate: canUseTimetableMapping
                 ? (dateKey) => {
@@ -415,12 +549,12 @@ export function AttendancePredictor() {
             fallbackClassesPerBunkDay: canUseTimetableMapping ? 0 : fallbackClassCount,
         });
     }, [
+        activeBunkDateKeys,
         activeSubjects,
         canUseTimetableMapping,
         fallbackClassCount,
         target,
         timetableSlots,
-        validBunkDateKeys,
     ]);
 
     const subjectLookup = useMemo(() => {
@@ -434,10 +568,10 @@ export function AttendancePredictor() {
                 attended: subject.attended,
                 total: subject.total,
                 target,
-                remainingClasses: remainingEstimate,
+                remainingClasses: planningRemainingEstimate,
             }),
         }));
-    }, [activeSubjects, remainingEstimate, target]);
+    }, [activeSubjects, planningRemainingEstimate, target]);
 
     const baselineSummary = useMemo(() => {
         const average =
@@ -488,11 +622,11 @@ export function AttendancePredictor() {
     const calendarPlanSummary = useMemo(() => {
         const plans = calendarSimulation.subjects.map((subject) => {
             const remaining =
-                remainingEstimate === undefined
+                planningRemainingEstimate === undefined
                     ? undefined
                     : Math.max(
                         0,
-                        remainingEstimate - subject.missedClassesFromBunkDays
+                        planningRemainingEstimate - subject.missedClassesFromBunkDays
                     );
             const plan = getAttendancePredictorPlan({
                 attended: subject.predictedAttended,
@@ -531,7 +665,7 @@ export function AttendancePredictor() {
                     }
                     : null,
         };
-    }, [calendarSimulation.subjects, remainingEstimate, target]);
+    }, [calendarSimulation.subjects, planningRemainingEstimate, target]);
 
     const subjectPlans = useMemo<SubjectPlanItem[]>(() => {
         return calendarSimulation.subjects
@@ -562,11 +696,11 @@ export function AttendancePredictor() {
                 const scenarioClasses =
                     (scenario?.attendNext ?? 0) + (scenario?.bunkNext ?? 0);
                 const remainingClasses =
-                    remainingEstimate === undefined
+                    planningRemainingEstimate === undefined
                         ? undefined
                         : Math.max(
                             0,
-                            remainingEstimate -
+                            planningRemainingEstimate -
                             calendarSubject.missedClassesFromBunkDays -
                             scenarioClasses
                         );
@@ -606,7 +740,7 @@ export function AttendancePredictor() {
             });
     }, [
         calendarSimulation.subjects,
-        remainingEstimate,
+        planningRemainingEstimate,
         scenarios,
         subjectLookup,
         target,
@@ -645,8 +779,8 @@ export function AttendancePredictor() {
             return;
         }
 
-        if (blockedDateKeys.includes(blockedDateInput)) {
-            setBlockedDateError("This blocked date is already added.");
+        if (effectiveBlockedDateKeys.includes(blockedDateInput)) {
+            setBlockedDateError("This date is already blocked/non-teaching.");
             return;
         }
 
@@ -658,7 +792,7 @@ export function AttendancePredictor() {
     }
 
     function toggleBunkDate(dateKey: string) {
-        const blockedSet = new Set(blockedDateKeys);
+        const blockedSet = new Set(effectiveBlockedDateKeys);
         const selected = bunkDateKeys.includes(dateKey);
 
         if (selected) {
@@ -719,6 +853,7 @@ export function AttendancePredictor() {
         setTarget(75);
         setCustomTarget("75");
         setSemesterEndDate("");
+        setCalendarPrefillApplied(false);
         setBlockedDateInput("");
         setBlockedDateError("");
         setBlockedDateKeys([]);
@@ -728,77 +863,63 @@ export function AttendancePredictor() {
         setScenarios({});
     }
 
+    function handleManualSyncedAttendanceChange(
+        subjectKey: string,
+        attended: number,
+        total: number
+    ) {
+        setManualSubjectAttendance(subjectKey, attended, total);
+    }
+
     return (
         <div className="space-y-6">
-            <AttendancePredictorSetup
-                target={target}
-                customTarget={customTarget}
-                targetError={targetError}
-                semesterEndDate={semesterEndDate}
-                semesterError={semesterError}
-                remainingCalendarDays={remainingDays.totalDays}
-                remainingAcademicDays={remainingDays.academicDays}
-                blockedDateInput={blockedDateInput}
-                blockedDateError={blockedDateError}
-                blockedDateKeys={blockedDateKeys}
-                defaultRemainingClasses={defaultRemainingClasses}
-                defaultRemainingClassesError={defaultRemainingClassesError}
-                fallbackClassesPerBunkDay={fallbackClassesPerBunkDay}
-                fallbackClassesPerBunkDayError={fallbackClassesPerBunkDayError}
-                onPresetTarget={updateTarget}
-                onCustomTargetChange={handleCustomTargetChange}
-                onSemesterEndDateChange={setSemesterEndDate}
-                onBlockedDateInputChange={setBlockedDateInput}
-                onAddBlockedDate={handleAddBlockedDate}
-                onRemoveBlockedDate={(dateKey) => {
-                    setBlockedDateKeys((current) =>
-                        current.filter((item) => item !== dateKey)
-                    );
-                }}
-                onDefaultRemainingClassesChange={setDefaultRemainingClasses}
-                onFallbackClassesPerBunkDayChange={setFallbackClassesPerBunkDay}
-                onReset={resetPredictorSettings}
-            />
+            {showLivePlanningTools && (
+                <>
+                    <AttendancePredictorSetup
+                        target={target}
+                        customTarget={customTarget}
+                        targetError={targetError}
+                        semesterEndDate={semesterEndDate}
+                        semesterError={semesterError}
+                        remainingCalendarDays={remainingDays.totalDays}
+                        remainingAcademicDays={remainingDays.academicDays}
+                        calendarModeLabel={calendarModeLabel}
+                        calendarBlockedCount={calendarBlockedDateKeys.length}
+                        calendarName={calendar?.name || "PESU Academy"}
+                        calendarStatus={calendar?.calendarStatus || "unknown"}
+                        calendarEndDate={calendarEndDate}
+                        calendarSyncedAt={syncedAt}
+                        sundayExcluded
+                        blockedDateInput={blockedDateInput}
+                        blockedDateError={blockedDateError}
+                        blockedDateKeys={blockedDateKeys}
+                        defaultRemainingClasses={defaultRemainingClasses}
+                        defaultRemainingClassesError={defaultRemainingClassesError}
+                        fallbackClassesPerBunkDay={fallbackClassesPerBunkDay}
+                        fallbackClassesPerBunkDayError={fallbackClassesPerBunkDayError}
+                        onPresetTarget={updateTarget}
+                        onCustomTargetChange={handleCustomTargetChange}
+                        onSemesterEndDateChange={setSemesterEndDate}
+                        onBlockedDateInputChange={setBlockedDateInput}
+                        onAddBlockedDate={handleAddBlockedDate}
+                        onRemoveBlockedDate={(dateKey) => {
+                            setBlockedDateKeys((current) =>
+                                current.filter((item) => item !== dateKey)
+                            );
+                        }}
+                        onDefaultRemainingClassesChange={setDefaultRemainingClasses}
+                        onFallbackClassesPerBunkDayChange={setFallbackClassesPerBunkDay}
+                        onReset={resetPredictorSettings}
+                    />
 
-            <BunkCalendar
-                semesterEndDate={semesterEndDate}
-                blockedDateKeys={blockedDateKeys}
-                selectedDateKeys={validBunkDateKeys}
-                onToggleDate={toggleBunkDate}
-                onClear={() => setBunkDateKeys([])}
-            />
-
-            <AttendanceBunkSummary
-                currentAverage={calendarSimulation.averageBefore}
-                predictedAverage={calendarSimulation.averageAfter}
-                totalBunkDays={calendarSimulation.totalBunkDays}
-                totalMissedClasses={calendarSimulation.totalMissedClasses}
-                safeCount={calendarPlanSummary.safeCount}
-                warningCount={calendarPlanSummary.warningCount}
-                dangerCount={calendarPlanSummary.dangerCount}
-                unrecoverableCount={calendarPlanSummary.unrecoverableCount}
-                biggestDropSubject={calendarPlanSummary.biggestDropSubject}
-                approximateMode={approximateMode}
-            />
-
-            <AttendancePredictorSummary
-                average={baselineSummary.average}
-                subjectCount={activeSubjects.length}
-                safeCount={baselineSummary.safeCount}
-                warningCount={baselineSummary.warningCount}
-                dangerCount={baselineSummary.dangerCount}
-                totalSkips={baselineSummary.totalSkips}
-                totalNeeded={baselineSummary.totalNeeded}
-                target={target}
-                lowestSubject={baselineSummary.lowest}
-            />
-
-            {!hasLiveData && (
-                <LiveEmptyState
-                    isLoading={loadState === "loading"}
-                    error={error}
-                    onSync={syncAttendance}
-                />
+                    <BunkCalendar
+                        semesterEndDate={semesterEndDate}
+                        blockedDateKeys={effectiveBlockedDateKeys}
+                        selectedDateKeys={validBunkDateKeys}
+                        onToggleDate={toggleBunkDate}
+                        onClear={() => setBunkDateKeys([])}
+                    />
+                </>
             )}
 
             <section className="rounded-[1.8rem] border border-white/[0.07] bg-white/[0.025] p-4 sm:p-5">
@@ -809,12 +930,16 @@ export function AttendancePredictor() {
                         </p>
 
                         <h2 className="mt-1 text-xl font-black tracking-tight text-white">
-                            {hasLiveData ? "Live attendance risk list" : "Manual fallback list"}
+                            {showLivePlanningTools
+                                ? "Live attendance risk list"
+                                : "Manual what-if subjects"}
                         </h2>
 
                         <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
-                            Sorted by lowest current attendance first.
-                            {syncedAt && hasLiveData
+                            {showLivePlanningTools
+                                ? "Sorted by lowest current attendance first."
+                                : "PESU attendance is unavailable, so only per-subject manual what-if prediction is shown."}
+                            {syncedAt && showLivePlanningTools
                                 ? ` Synced ${new Date(syncedAt).toLocaleString()}.`
                                 : ""}
                         </p>
@@ -845,6 +970,9 @@ export function AttendancePredictor() {
                                 calendarPredictedPercent={item.calendarPredictedPercent}
                                 simulationActive={item.simulationActive}
                                 dataLabel={dataLabel}
+                                manualMode={isManualFallback && hasSyncedSubjects}
+                                whatIfOnly={!showLivePlanningTools}
+                                onManualAttendanceChange={handleManualSyncedAttendanceChange}
                                 onApplyScenario={applyScenario}
                             />
                         ))}
@@ -855,13 +983,13 @@ export function AttendancePredictor() {
                             No predictor subjects yet
                         </p>
                         <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-                            Sync PESU attendance or add a manual fallback subject below.
+                            Add a manual subject below to start what-if prediction.
                         </p>
                     </div>
                 )}
             </section>
 
-            {!hasLiveData && (
+            {!hasSyncedSubjects && (
                 <ManualFallbackPanel
                     manualCount={manualSubjects.length}
                     onSubmit={handleManualSubmit}
@@ -871,45 +999,39 @@ export function AttendancePredictor() {
                     }}
                 />
             )}
+
+            {showLivePlanningTools && (
+                <>
+                    <AttendanceBunkSummary
+                        currentAverage={calendarSimulation.averageBefore}
+                        predictedAverage={calendarSimulation.averageAfter}
+                        totalBunkDays={calendarSimulation.totalBunkDays}
+                        totalMissedClasses={calendarSimulation.totalMissedClasses}
+                        safeCount={calendarPlanSummary.safeCount}
+                        warningCount={calendarPlanSummary.warningCount}
+                        dangerCount={calendarPlanSummary.dangerCount}
+                        unrecoverableCount={calendarPlanSummary.unrecoverableCount}
+                        biggestDropSubject={calendarPlanSummary.biggestDropSubject}
+                        approximateMode={approximateMode}
+                        remainingWorkingDays={remainingDays.academicDays}
+                        calendarModeLabel={calendarModeLabel}
+                        totalEstimatedRemainingClasses={totalEstimatedRemainingClasses}
+                    />
+
+                    <AttendancePredictorSummary
+                        average={baselineSummary.average}
+                        subjectCount={activeSubjects.length}
+                        safeCount={baselineSummary.safeCount}
+                        warningCount={baselineSummary.warningCount}
+                        dangerCount={baselineSummary.dangerCount}
+                        totalSkips={baselineSummary.totalSkips}
+                        totalNeeded={baselineSummary.totalNeeded}
+                        target={target}
+                        lowestSubject={baselineSummary.lowest}
+                    />
+                </>
+            )}
         </div>
-    );
-}
-
-function LiveEmptyState({
-    isLoading,
-    error,
-    onSync,
-}: {
-    isLoading: boolean;
-    error: string;
-    onSync: () => void;
-}) {
-    return (
-        <motion.section
-            variants={sectionMotion}
-            initial="initial"
-            animate="animate"
-        >
-            <StudioInfoBox
-                title="Sync your PESU attendance first to use the live predictor."
-                description={
-                    error ||
-                    "The predictor uses synced PESU attendance as its primary source. Demo attendance is intentionally not used for live predictions."
-                }
-                tone={error ? "red" : "orange"}
-                icon={AlertTriangle}
-            />
-
-            <button
-                type="button"
-                onClick={onSync}
-                disabled={isLoading}
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-                <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
-                {isLoading ? "Checking PESU data..." : "Check synced attendance"}
-            </button>
-        </motion.section>
     );
 }
 

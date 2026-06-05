@@ -24,12 +24,11 @@ export function SgpaComingSoon() {
                         </div>
 
                         <h2 className="mt-4 text-2xl font-black tracking-tight text-white">
-                            SGPA and CGPA predictor will be added next.
+                            Grade and SGPA planning will be added after Attendance Predictor.
                         </h2>
 
                         <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
-                            The Attendance Predictor is ready now. Grade prediction stays
-                            parked until the next feature pass.
+                            SGPA and CGPA predictor will be added next.
                         </p>
                     </div>
                 </div>

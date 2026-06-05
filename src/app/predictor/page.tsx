@@ -22,8 +22,8 @@ export default function PredictorPage() {
 
     return (
         <DashboardShell
-            title="Predictor Tool"
-            subtitle="Plan attendance, grades, and academic risk before it becomes a problem."
+            title="Predictor"
+            subtitle="Plan attendance and academic outcomes before they surprise you."
         >
             <div className="main-shine-surface mx-auto max-w-7xl space-y-6 rounded-[2.5rem]">
                 <motion.div variants={sectionMotion} initial="initial" animate="animate">
@@ -31,7 +31,7 @@ export default function PredictorPage() {
                         badge="CampusFlow / Predictor"
                         title="Predictor"
                         mutedTitle="Tool."
-                        description="Plan attendance, grades, and academic risk before it becomes a problem."
+                        description="Plan attendance and academic outcomes before they surprise you."
                     >
                         <PredictorHeroCard />
                     </StudioHero>
