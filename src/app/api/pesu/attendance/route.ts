@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { getPesuSession } from "@/lib/server/pesu-session";
+import {
+    mapPesuAttendanceToSubjects,
+    mapPesuCoursesToAttendanceFallback,
+} from "@/lib/pesu/campusflow-pesu";
 
 export const dynamic = "force-dynamic";
+
+const FALLBACK_MESSAGE =
+    "Attendance is not available on PESU yet. Add your attendance manually.";
 
 export async function GET() {
     try {
@@ -18,15 +25,27 @@ export async function GET() {
             );
         }
 
+        const liveSubjects = mapPesuAttendanceToSubjects(session.data.attendance);
+        const liveAvailable = liveSubjects.length > 0;
+        const fallbackSubjects = liveAvailable
+            ? []
+            : mapPesuCoursesToAttendanceFallback(session.data.courses);
+        const mode = liveAvailable ? "live" : "manual-fallback";
+        const subjects = liveAvailable ? liveSubjects : fallbackSubjects;
+
         return NextResponse.json({
             source: session.data.source,
             syncedAt: session.data.syncedAt,
-            subjects: session.data.attendance.map((subject) => ({
-                name: subject.name,
-                code: subject.code,
-                attended: subject.attended,
-                total: subject.total,
-                faculty: undefined,
+            liveAvailable,
+            mode,
+            message: liveAvailable ? "" : FALLBACK_MESSAGE,
+            subjects: subjects.map((subject) => ({
+                ...subject,
+                percentage:
+                    subject.total > 0
+                        ? Number(((subject.attended / subject.total) * 100).toFixed(2))
+                        : 0,
+                mode,
             })),
             errors: session.data.errors,
         });

@@ -99,6 +99,33 @@ export type SafePesuSeating = {
     items: SafePesuSeatingItem[];
 };
 
+export type SafePesuCalendarEvent = {
+  id: string;
+  title: string;
+  date: string;
+  endDate?: string;
+  type: "holiday" | "isa" | "esa" | "semester-start" | "semester-end" | "exam" | "event" | "blocked" | "non-instructional" | "unknown";
+  source?: "pesu-academy" | "pes-public-calendar" | "manual" | "unknown";
+  rawType?: string | null;
+  description?: string | null;
+  color?: string | null;
+  isHoliday?: boolean;
+  isClass?: boolean;
+  calendarOfEventName?: string | null;
+};
+
+export type SafePesuCalendar = {
+  source: "pesu-academy" | "pes-public-calendar" | "manual" | "unknown";
+  semesterId?: string | null;
+  name?: string;
+  startDate?: string;
+  endDate?: string;
+  calendarStatus?: "active" | "upcoming" | "past" | "unknown";
+  usableForPrediction?: boolean;
+  blockedDateKeys?: string[];
+  events: SafePesuCalendarEvent[];
+};
+
 export type SafePesuSyncResponse = {
     ok: boolean;
     source: "pesu";
@@ -109,12 +136,14 @@ export type SafePesuSyncResponse = {
     timetable?: SafePesuTimetable;
     results?: SafePesuResults;
     seating?: SafePesuSeating;
+    calendar?: SafePesuCalendar;
     errors?: {
         attendance?: string | null;
         courses?: string | null;
         timetable?: string | null;
         results?: string | null;
         seating?: string | null;
+        calendar?: string | null;
     };
 };
 
@@ -139,6 +168,9 @@ function isSafeSyncResponse(value: unknown): value is SafePesuSyncResponse {
     const hasValidSeating =
         data.seating === undefined ||
         (Boolean(data.seating) && Array.isArray(data.seating.items));
+    const hasValidCalendar =
+        data.calendar === undefined ||
+        (Boolean(data.calendar) && Array.isArray(data.calendar.events));
 
     return (
         data.ok === true &&
@@ -148,7 +180,8 @@ function isSafeSyncResponse(value: unknown): value is SafePesuSyncResponse {
         Array.isArray(data.courses) &&
         timetableIsValid &&
         resultsIsValid &&
-        hasValidSeating
+        hasValidSeating &&
+        hasValidCalendar
     );
 }
 
@@ -201,6 +234,7 @@ export function savePesuSyncCache(data: SafePesuSyncResponse) {
         timetable: data.timetable,
         results: data.results,
         seating: data.seating,
+        calendar: data.calendar,
         errors: data.errors,
     };
 
@@ -247,4 +281,32 @@ export function mapPesuAttendanceToSubjects(
         total: subject.total,
         faculty: undefined,
     }));
+}
+
+export function mapPesuCoursesToAttendanceFallback(
+    courses: SafePesuCourse[]
+): AttendanceSubject[] {
+    const seen = new Set<string>();
+
+    return courses
+        .map((course, index) => {
+            const code = course.code?.trim() || `COURSE-${index + 1}`;
+            const name = course.name?.trim() || code;
+
+            return {
+                code,
+                name,
+                attended: 0,
+                total: 0,
+                faculty: undefined,
+            };
+        })
+        .filter((subject) => {
+            const key = subject.code || subject.name;
+
+            if (!key || seen.has(key)) return false;
+
+            seen.add(key);
+            return true;
+        });
 }

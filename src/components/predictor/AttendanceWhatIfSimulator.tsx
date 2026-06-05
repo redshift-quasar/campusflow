@@ -18,7 +18,7 @@ type AttendanceWhatIfSimulatorProps = {
 };
 
 const inputClass =
-    "w-full rounded-xl border border-white/[0.07] bg-white/[0.045] px-3 py-2 text-sm font-black text-white outline-none transition placeholder:text-slate-700 focus:border-sky-300/30 focus:bg-white/[0.065]";
+    "w-full rounded-xl border border-white/[0.07] bg-white/[0.045] px-3 py-1.5 text-sm font-black text-white outline-none transition placeholder:text-slate-700 focus:border-sky-300/30 focus:bg-white/[0.065]";
 
 function parseClassCount(value: string) {
     const parsed = Number(value);
@@ -108,13 +108,13 @@ export function AttendanceWhatIfSimulator({
     }
 
     return (
-        <div className="rounded-[1.35rem] border border-white/[0.06] bg-white/[0.035] p-4">
+        <div className="rounded-[0.95rem] border border-white/[0.06] bg-white/[0.035] p-2.5">
             <div className="flex items-center justify-between gap-3">
                 <div>
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-600">
                         What-if
                     </p>
-                    <p className="mt-1 text-sm font-black text-white">
+                    <p className="mt-0.5 text-xs font-black text-white">
                         Scenario simulator
                     </p>
                 </div>
@@ -127,7 +127,7 @@ export function AttendanceWhatIfSimulator({
                 </span>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
                 <label>
                     <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.14em] text-slate-600">
                         Attend next
@@ -161,12 +161,12 @@ export function AttendanceWhatIfSimulator({
                 </p>
             )}
 
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-black/15 px-4 py-3">
+            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-black/15 px-3 py-2">
                 <div>
                     <p className="text-xs font-bold text-slate-500">
                         New attendance
                     </p>
-                    <p className="mt-1 text-2xl font-black tracking-[-0.04em] text-white">
+                    <p className="mt-0.5 text-lg font-black tracking-[-0.04em] text-white">
                         {scenario.percent}%
                     </p>
                     <p className="mt-1 text-xs font-bold text-slate-600">
@@ -185,18 +185,18 @@ export function AttendanceWhatIfSimulator({
                     </p>
                 </div>
 
-                <p className="max-w-[11rem] text-right text-xs font-bold leading-5 text-slate-500">
+                <p className="max-w-[10rem] text-right text-[11px] font-bold leading-4 text-slate-500">
                     {scenarioPlan.status === "safe"
                         ? `Stays above ${target}%.`
                         : scenarioPlan.advice}
                 </p>
             </div>
 
-            <p className="mt-3 text-[11px] font-bold leading-5 text-slate-600">
-                Simulation only — your synced PESU data is unchanged.
+            <p className="mt-2 text-[10px] font-bold leading-4 text-slate-600">
+                Simulation only - your saved attendance is unchanged.
             </p>
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-2.5 flex gap-2">
                 <button
                     type="button"
                     onClick={applyScenario}

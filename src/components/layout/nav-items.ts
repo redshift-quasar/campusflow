@@ -38,14 +38,14 @@ export const navItems: NavItem[] = [
         icon: BarChart3,
     },
     {
-        label: "Results",
-        href: "/results",
-        icon: GraduationCap,
-    },
-    {
         label: "Predictor",
         href: "/predictor",
         icon: Calculator,
+    },
+    {
+        label: "Results",
+        href: "/results",
+        icon: GraduationCap,
     },
     {
         label: "Seating",

@@ -1,15 +1,63 @@
+export type AcademicCalendarEventType =
+    | "holiday"
+    | "exam"
+    | "isa"
+    | "esa"
+    | "vacation"
+    | "semester-start"
+    | "semester-end"
+    | "working-day"
+    | "non-instructional"
+    | "blocked"
+    | "event"
+    | "other"
+    | "unknown";
+
+export type AcademicCalendarSource =
+    | "pes-public-calendar"
+    | "pesu-academy"
+    | "manual"
+    | "unknown";
+
+export type AcademicCalendarDocument = {
+    id: string;
+    title: string;
+    href: string;
+    year?: string;
+    program?: string;
+    source: AcademicCalendarSource;
+};
+
 export type AcademicCalendarEvent = {
     id: string;
     title: string;
     date: string;
-    type: "holiday" | "isa" | "esa" | "semester-end" | "event";
+    endDate?: string;
+    type: AcademicCalendarEventType;
+    source?: AcademicCalendarSource;
+    rawType?: string;
+    description?: string;
+    campus?: string;
+    program?: string;
+    semester?: string;
 };
 
-export function getBlockedAcademicDates(events: AcademicCalendarEvent[]): string[] {
-    return events
-        .filter((event) =>
-            ["holiday", "isa", "esa", "event"].includes(event.type)
-        )
-        .map((event) => event.date)
-        .filter(Boolean);
-}
+export type SemesterCalendar = {
+    semesterId: string;
+    startDate: string;
+    endDate: string;
+    events: AcademicCalendarEvent[];
+};
+
+export type AcademicCalendarFetchResult = {
+    ok: boolean;
+    source: AcademicCalendarSource;
+    fetchedAt: string;
+    syncedAt: string;
+    semesterId: string;
+    startDate: string;
+    endDate: string;
+    documents: AcademicCalendarDocument[];
+    events: AcademicCalendarEvent[];
+    message?: string;
+};

@@ -207,7 +207,9 @@ export function AppSidebar({
                 </motion.div>
 
                 <nav
-                    className={`absolute left-0 right-0 top-1/2 -translate-y-1/2 space-y-2 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${sidebarExpanded ? "w-full" : "mx-auto w-12"
+                    className={`absolute left-0 right-0 flex flex-col transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${sidebarExpanded
+                            ? "top-[4.5rem] bottom-[8.75rem] w-full justify-center gap-1"
+                            : "top-1/2 mx-auto w-12 -translate-y-1/2 gap-1.5"
                         }`}
                 >
                     {navItems.map((item) => (
@@ -321,8 +323,8 @@ function SidebarLink({
             aria-current={active ? "page" : undefined}
             onClick={onNavigate}
             className={`group/nav relative flex items-center overflow-visible rounded-2xl text-sm font-bold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${expanded
-                    ? "w-full justify-start gap-3 px-4 py-3"
-                    : "mx-auto h-12 w-12 justify-center px-0 py-0"
+                    ? "min-h-10 w-full justify-start gap-3 px-3 py-1"
+                    : "mx-auto h-11 w-11 justify-center px-0 py-0"
                 } ${active
                     ? expanded
                         ? "bg-white/[0.045] text-white"
@@ -331,7 +333,8 @@ function SidebarLink({
                 }`}
         >
             <span
-                className={`relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/nav:scale-105 ${active
+                className={`relative z-10 flex shrink-0 items-center justify-center rounded-[1rem] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/nav:scale-105 ${expanded ? "h-8 w-8" : "h-9 w-9"
+                    } ${active
                         ? "bg-sky-300/[0.12] text-sky-100 shadow-[0_0_24px_rgba(125,211,252,0.14)]"
                         : "text-slate-500 group-hover/nav:text-white"
                     }`}
@@ -339,7 +342,7 @@ function SidebarLink({
                 {active && (
                     <motion.span
                         layoutId="sidebar-orbit-shell"
-                        className="absolute inset-0 rounded-2xl"
+                        className="absolute inset-0 rounded-[1rem]"
                         transition={{
                             type: "spring",
                             stiffness: 360,
@@ -361,11 +364,11 @@ function SidebarLink({
                     </motion.span>
                 )}
 
-                <Icon size={18} strokeWidth={active ? 2.5 : 2.2} />
+                <Icon size={expanded ? 17 : 18} strokeWidth={active ? 2.5 : 2.2} />
             </span>
 
             <span
-                className={`relative z-10 overflow-hidden whitespace-nowrap transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${expanded
+                className={`relative z-10 overflow-hidden whitespace-nowrap leading-none transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${expanded
                         ? "w-auto translate-x-0 opacity-100"
                         : "w-0 translate-x-2 opacity-0"
                     } ${active ? "text-white" : "text-slate-500 group-hover/nav:text-white"}`}

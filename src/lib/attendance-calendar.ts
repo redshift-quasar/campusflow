@@ -59,11 +59,13 @@ export function getRemainingCalendarDays({
     fromDate,
     semesterEndDate,
     blockedDateKeys = [],
+    excludeSundays = false,
     excludeWeekends = false,
 }: {
     fromDate: Date;
     semesterEndDate: Date;
     blockedDateKeys?: string[];
+    excludeSundays?: boolean;
     excludeWeekends?: boolean;
 }): {
     totalDays: number;
@@ -75,9 +77,14 @@ export function getRemainingCalendarDays({
     const dateKeys = dates
         .filter((date) => {
             const dateKey = toDateKey(date);
+            const sunday = date.getDay() === 0;
             const weekend = date.getDay() === 0 || date.getDay() === 6;
 
-            return !blockedSet.has(dateKey) && !(excludeWeekends && weekend);
+            return (
+                !blockedSet.has(dateKey) &&
+                !(excludeSundays && sunday) &&
+                !(excludeWeekends && weekend)
+            );
         })
         .map(toDateKey)
         .filter(Boolean);

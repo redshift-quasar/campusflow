@@ -52,7 +52,7 @@ export function AttendancePredictorSummary({
             <MetricCard
                 label="Average"
                 value={`${average}%`}
-                detail={`Across ${subjectCount} manual subjects`}
+                detail={`Across ${subjectCount} subjects`}
                 icon={BarChart3}
                 tone={averageTone}
             />
