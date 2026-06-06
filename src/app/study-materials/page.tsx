@@ -8,12 +8,42 @@ import {
     FileText,
     FileWarning,
     Layers,
+    RefreshCw,
     Sparkles,
 } from "lucide-react";
 import {
     MOCK_STUDY_MATERIAL_CATALOG,
     type StudyMaterial,
+    type StudyMaterialCatalog,
 } from "@/lib/pesu/study-materials";
+import { DashboardShell } from "@/components/layout/DashboardShell";
+
+type CatalogSource = "mock" | "pesuacademy" | "mock-fallback";
+
+type MaterialsCatalogApiResponse =
+    | {
+          ok: true;
+          source: CatalogSource;
+          catalog: StudyMaterialCatalog;
+          warnings?: string[];
+      }
+    | {
+          ok: false;
+          error: string;
+      };
+
+type MaterialMergeApiResponse =
+    | {
+          ok: true;
+          source: "mock";
+          message: string;
+          materialIds: string[];
+          selectedCount: number;
+      }
+    | {
+          ok: false;
+          error: string;
+      };
 
 function getTypeLabel(type: StudyMaterial["type"]) {
     if (type === "pdf") return "PDF";
@@ -40,7 +70,7 @@ function getTypeClasses(type: StudyMaterial["type"]) {
 }
 
 export default function StudyMaterialsPage() {
-    const catalog = MOCK_STUDY_MATERIAL_CATALOG;
+    const [catalog, setCatalog] = useState(MOCK_STUDY_MATERIAL_CATALOG);
 
     const [selectedSubjectCode, setSelectedSubjectCode] = useState(
         catalog.subjects[0]?.code ?? "",
@@ -48,6 +78,14 @@ export default function StudyMaterialsPage() {
     const [selectedUnit, setSelectedUnit] = useState("All Units");
     const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
     const [statusMessage, setStatusMessage] = useState("");
+    const [isMerging, setIsMerging] = useState(false);
+    const [catalogSource, setCatalogSource] = useState<CatalogSource>("mock");
+    const [catalogWarnings, setCatalogWarnings] = useState<string[]>([]);
+    const [catalogStatusMessage, setCatalogStatusMessage] = useState("");
+    const [isSyncingMaterials, setIsSyncingMaterials] = useState(false);
+    const [pesuUsername, setPesuUsername] = useState("");
+    const [pesuPassword, setPesuPassword] = useState("");
+    const [pesuSemester, setPesuSemester] = useState("");
 
     const selectedSubject = useMemo(() => {
         return catalog.subjects.find((subject) => subject.code === selectedSubjectCode);
@@ -75,17 +113,18 @@ export default function StudyMaterialsPage() {
     function handleSubjectChange(subjectCode: string) {
         setSelectedSubjectCode(subjectCode);
         setSelectedUnit("All Units");
+        setSelectedMaterialIds([]);
         setStatusMessage("");
     }
 
     function handleUnitChange(unit: string) {
         setSelectedUnit(unit);
+        setSelectedMaterialIds([]);
         setStatusMessage("");
     }
 
     function toggleMaterial(material: StudyMaterial) {
         if (material.type !== "pdf") {
-            setStatusMessage("Only PDF materials can be combined right now.");
             return;
         }
 
@@ -100,27 +139,114 @@ export default function StudyMaterialsPage() {
         });
     }
 
-    function handleMergeClick() {
+    async function handleSyncMaterials() {
+        const username = pesuUsername.trim();
+        const semester = pesuSemester.trim();
+
+        if (!username || !pesuPassword) {
+            setCatalogStatusMessage("Username and password are required.");
+            return;
+        }
+
+        setIsSyncingMaterials(true);
+        setCatalogWarnings([]);
+        setCatalogStatusMessage("Syncing materials...");
+
+        try {
+            const response = await fetch("/api/pesu/materials/catalog", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    username,
+                    password: pesuPassword,
+                    semester: semester || undefined,
+                }),
+            });
+            const data = (await response.json()) as MaterialsCatalogApiResponse;
+
+            if (!response.ok || !data.ok) {
+                setCatalogStatusMessage(
+                    data.ok ? "Could not sync materials." : data.error,
+                );
+                return;
+            }
+
+            const nextSubjectCode = data.catalog.subjects[0]?.code ?? "";
+
+            setCatalog(data.catalog);
+            setCatalogSource(data.source);
+            setCatalogWarnings(data.warnings ?? []);
+            setSelectedSubjectCode(nextSubjectCode);
+            setSelectedUnit("All Units");
+            setSelectedMaterialIds([]);
+            setStatusMessage("");
+            setCatalogStatusMessage(
+                data.source === "pesuacademy"
+                    ? "Materials synced from PESU Academy."
+                    : "Using fallback material catalog.",
+            );
+        } catch {
+            setCatalogStatusMessage("Could not sync materials.");
+        } finally {
+            setPesuPassword("");
+            setIsSyncingMaterials(false);
+        }
+    }
+
+    async function handleMergeClick() {
         if (selectedPdfCount === 0) {
             setStatusMessage("Select at least one PDF before combining.");
             return;
         }
 
-        setStatusMessage(
-            `Merge API will be connected next. ${selectedPdfCount} PDF file${selectedPdfCount === 1 ? "" : "s"
-            } selected.`,
-        );
+        setIsMerging(true);
+        setStatusMessage("Preparing merge...");
+
+        try {
+            const response = await fetch("/api/pesu/materials/merge", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    username: "demo",
+                    password: "demo",
+                    materialIds: selectedMaterialIds,
+                }),
+            });
+            const data = (await response.json()) as MaterialMergeApiResponse;
+
+            if (!response.ok || !data.ok) {
+                setStatusMessage(
+                    data.ok ? "Could not prepare material merge." : data.error,
+                );
+                return;
+            }
+
+            setStatusMessage(
+                `${data.message}. ${data.selectedCount} PDF file(s) selected.`,
+            );
+        } catch {
+            setStatusMessage("Could not prepare material merge.");
+        } finally {
+            setIsMerging(false);
+        }
     }
 
     return (
-        <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
-            <div className="mx-auto flex max-w-7xl flex-col gap-6">
-                <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-2xl shadow-black/30 backdrop-blur md:p-7">
+        <DashboardShell
+            title="Study Hub"
+            subtitle="Mock study material organizer for PDFs, slides, docs, and links."
+        >
+            <div className="main-shine-surface mx-auto flex max-w-7xl flex-col gap-5 rounded-[2.5rem] text-slate-100">
+                <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-2xl shadow-black/30 backdrop-blur md:p-6">
                     <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                         <div className="space-y-3">
                             <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-200">
                                 <Sparkles className="h-3.5 w-3.5" />
-                                PESU Academy Material Organizer
+                                Source: {catalogSource}
                             </div>
 
                             <div>
@@ -147,7 +273,7 @@ export default function StudyMaterialsPage() {
 
                             <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
                                 <div className="flex items-center gap-2 text-sm text-slate-400">
-                                    <FileText className="h-4 w-4 text-violet-300" />
+                                    <FileText className="h-4 w-4 text-blue-300" />
                                     Materials
                                 </div>
                                 <p className="mt-2 text-2xl font-semibold text-white">
@@ -160,7 +286,74 @@ export default function StudyMaterialsPage() {
 
                 <section className="grid gap-4 lg:grid-cols-[320px_1fr]">
                     <aside className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur">
-                        <div className="flex items-center gap-2">
+                        <form
+                            className="space-y-3 border-b border-white/10 pb-5"
+                            autoComplete="off"
+                            onSubmit={(event) => {
+                                event.preventDefault();
+                                void handleSyncMaterials();
+                            }}
+                        >
+                            <div className="flex items-center gap-2">
+                                <RefreshCw className="h-5 w-5 text-cyan-300" />
+                                <h2 className="font-semibold text-white">Sync Materials</h2>
+                            </div>
+
+                            <div className="grid gap-3">
+                                <input
+                                    type="text"
+                                    value={pesuUsername}
+                                    onChange={(event) => setPesuUsername(event.target.value)}
+                                    placeholder="Username"
+                                    autoComplete="off"
+                                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400/50"
+                                />
+
+                                <input
+                                    type="password"
+                                    value={pesuPassword}
+                                    onChange={(event) => setPesuPassword(event.target.value)}
+                                    placeholder="Password"
+                                    autoComplete="off"
+                                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400/50"
+                                />
+
+                                <input
+                                    type="text"
+                                    value={pesuSemester}
+                                    onChange={(event) => setPesuSemester(event.target.value)}
+                                    placeholder="Semester optional"
+                                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400/50"
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={isSyncingMaterials}
+                                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
+                            >
+                                <RefreshCw
+                                    className={`h-4 w-4 ${isSyncingMaterials ? "animate-spin" : ""}`}
+                                />
+                                {isSyncingMaterials ? "Syncing materials..." : "Sync Materials"}
+                            </button>
+
+                            {catalogStatusMessage ? (
+                                <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-3 text-sm text-slate-300">
+                                    {catalogStatusMessage}
+                                </div>
+                            ) : null}
+
+                            {catalogWarnings.length > 0 ? (
+                                <div className="space-y-2 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100">
+                                    {catalogWarnings.map((warning) => (
+                                        <p key={warning}>{warning}</p>
+                                    ))}
+                                </div>
+                            ) : null}
+                        </form>
+
+                        <div className="mt-5 flex items-center gap-2">
                             <Layers className="h-5 w-5 text-cyan-300" />
                             <h2 className="font-semibold text-white">Filters</h2>
                         </div>
@@ -216,11 +409,11 @@ export default function StudyMaterialsPage() {
                             <button
                                 type="button"
                                 onClick={handleMergeClick}
-                                disabled={selectedPdfCount === 0}
+                                disabled={selectedPdfCount === 0 || isMerging}
                                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
                             >
                                 <Download className="h-4 w-4" />
-                                Combine Selected PDFs
+                                {isMerging ? "Preparing merge..." : "Combine Selected PDFs"}
                             </button>
 
                             {statusMessage ? (
@@ -266,8 +459,9 @@ export default function StudyMaterialsPage() {
                                         <button
                                             key={material.id}
                                             type="button"
+                                            disabled={!isPdf}
                                             onClick={() => toggleMaterial(material)}
-                                            className={`group flex min-h-[190px] flex-col rounded-3xl border p-4 text-left transition ${isSelected
+                                            className={`group flex min-h-[168px] flex-col rounded-3xl border p-3 text-left transition sm:p-4 ${isSelected
                                                     ? "border-cyan-400/60 bg-cyan-400/10"
                                                     : "border-white/10 bg-slate-900/70 hover:border-cyan-400/30 hover:bg-slate-900"
                                                 } ${!isPdf ? "cursor-not-allowed opacity-75" : ""}`}
@@ -298,7 +492,7 @@ export default function StudyMaterialsPage() {
                                                 </h3>
 
                                                 {material.description ? (
-                                                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-400">
+                                                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-400">
                                                         {material.description}
                                                     </p>
                                                 ) : null}
@@ -316,6 +510,6 @@ export default function StudyMaterialsPage() {
                     </section>
                 </section>
             </div>
-        </main>
+        </DashboardShell>
     );
 }

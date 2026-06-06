@@ -6,10 +6,11 @@ export type StudyMaterial = {
     subjectName: string;
     unit: string;
     title: string;
-    description: string;
+    description?: string;
     type: StudyMaterialType;
-    sizeLabel: string;
-    uploadedAt: string;
+    source?: "mock" | "pesuacademy";
+    sizeLabel?: string;
+    uploadedAt?: string;
 };
 
 export type StudySubject = {

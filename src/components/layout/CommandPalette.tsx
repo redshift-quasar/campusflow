@@ -204,10 +204,11 @@ export function CommandPalette({
                 type: "page",
                 description: item.label === "Dashboard" ? "Your academic command center. View live attendance summary, quick stats, today's classes, exams, results, and quick actions."
                     : item.label === "Attendance" ? "Track your subject-wise attendance percentages, see how many classes you can afford to bunk or need to attend to meet your target."
-                        : item.label === "Timetable" ? "Look at your weekly class schedule slot-by-slot, showing rooms, slots, days, and times."
-                            : item.label === "Results" ? "Check your academic marks, SGPA/CGPA records, credits, and subject grades."
-                                : item.label === "Seating" ? "View your seating arrangements, dates, times, and exam blocks for scheduled exams."
-                                    : "Configure application settings, targets, and privacy session options."
+                            : item.label === "Timetable" ? "Look at your weekly class schedule slot-by-slot, showing rooms, slots, days, and times."
+                                : item.label === "Results" ? "Check your academic marks, SGPA/CGPA records, credits, and subject grades."
+                                    : item.label === "Seating" ? "View your seating arrangements, dates, times, and exam blocks for scheduled exams."
+                                        : item.label === "Study Hub" ? "Pick a subject and unit, select PDF notes, and prepare them for combining into one clean study file."
+                                            : "Configure application settings, targets, and privacy session options."
             }
         }));
 

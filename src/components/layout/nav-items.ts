@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
     Armchair,
     BarChart3,
+    BookOpen,
     CalendarDays,
     Calculator,
     Clock3,
@@ -41,6 +42,11 @@ export const navItems: NavItem[] = [
         label: "Predictor",
         href: "/predictor",
         icon: Calculator,
+    },
+    {
+        label: "Study Hub",
+        href: "/study-materials",
+        icon: BookOpen,
     },
     {
         label: "Results",
