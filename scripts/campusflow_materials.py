@@ -62,10 +62,13 @@ PORTAL_ADMIN_URL = shared_portal_admin_url or "https://www.pesuacademy.com/Acade
 PESU_ORIGIN_URL = "https://www.pesuacademy.com"
 ACADEMY_BASE_URL = f"{PESU_ORIGIN_URL}/Academy"
 ACTION_BASE_URL = f"{ACADEMY_BASE_URL}/a/studentProfilePESU"
+ELEARNING_JS_URL = f"{ACADEMY_BASE_URL}/js/elearning.js"
 LOGIN_PAGE_PATH = "/"
 LOGIN_TIMEOUT_SECONDS = 30.0
 
 FALLBACK_WARNING = "Real PESU material extraction failed, using fallback catalog."
+ELEARNING_JS_PARSE_WARNING = "eLearning JS discovered but material API parsing is not implemented yet."
+ELEARNING_ENDPOINT_PROBE_LIMIT = 28
 
 SUBJECT_CODE_RE = re.compile(r"\b[A-Z]{2}\d{2}[A-Z]{2,4}\d{2,4}[A-Z]?\b")
 DATE_RE = re.compile(r"\b(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b")
@@ -93,6 +96,8 @@ MATERIAL_KEYWORDS = [
     "tutorial",
     "assignment",
     "module",
+    "topic",
+    "topics",
     "unit",
     "subject",
     "syllabus",
@@ -249,6 +254,75 @@ MATERIAL_KEYWORD_RE = re.compile(
     "|".join(re.escape(keyword) for keyword in sorted(MATERIAL_KEYWORDS, key=len, reverse=True)),
     re.I,
 )
+
+ELEARNING_JS_KEYWORDS = [
+    "material",
+    "course",
+    "content",
+    "unit",
+    "topic",
+    "resource",
+    "document",
+    "file",
+    "download",
+    "subject",
+    "module",
+    "eLearning",
+    "elearning",
+]
+
+ELEARNING_JS_KEYWORD_RE = re.compile(
+    "|".join(re.escape(keyword) for keyword in sorted(ELEARNING_JS_KEYWORDS, key=len, reverse=True)),
+    re.I,
+)
+
+ELEARNING_JS_STRING_RE = re.compile(
+    r"""(?P<quote>['"`])(?P<value>(?:\\.|(?! (?P=quote) ).){0,1000})(?P=quote)""",
+    re.S | re.X,
+)
+
+ELEARNING_URL_ACTION_RE = re.compile(
+    r"""(?:url|action)\s*:\s*(?P<quote>['"`])(?P<value>(?:\\.|(?! (?P=quote) ).){1,1000})(?P=quote)""",
+    re.I | re.S | re.X,
+)
+
+ELEARNING_AJAX_CALL_RE = re.compile(
+    r"""(?P<kind>\$\s*\.\s*(?:ajax|post|get)|fetch|doAjaxCall)\s*\(""",
+    re.I,
+)
+
+ELEARNING_DO_AJAX_CALL_RE = re.compile(
+    r"""doAjaxCall\s*\(\s*(?P<quote>['"])(?P<endpoint>[^'"]{1,220})(?P=quote)\s*,\s*(?P<method_quote>['"])(?P<method>GET|POST)(?P=method_quote)\s*,\s*(?P<data_var>[A-Za-z_$][\w$]*)""",
+    re.I,
+)
+
+ELEARNING_OBJECT_FIELD_RE = re.compile(
+    r"""
+    (?P<key>[A-Za-z_$][\w$]*|['"][^'"]{1,80}['"])\s*:\s*
+    (?P<value>
+        "(?:\\.|[^"]){0,220}" |
+        '(?:\\.|[^']){0,220}' |
+        \d+(?:\.\d+)? |
+        true |
+        false |
+        null |
+        elearningmenuId
+    )
+    """,
+    re.I | re.X,
+)
+
+ELEARNING_ACTION_PRIORITY = {
+    "1": 0,
+    "7": 1,
+    "14": 2,
+    "15": 3,
+    "23": 4,
+    "27": 5,
+    "42": 6,
+    "43": 7,
+    "48": 8,
+}
 
 MOCK_FALLBACK_CATALOG = {
     "subjects": [
@@ -485,11 +559,17 @@ def safe_url_for_debug(url: Any, *, include_scheme: bool = False):
     path_segments = [segment.lower() for segment in path.split("/") if segment]
 
     if any(
-        segment in {"download", "downloadfile", "downloadcoursedoc", "filedownload"}
+        segment in {
+            "download",
+            "downloadfile",
+            "downloadcoursedoc",
+            "downloadsectioncontentfile",
+            "filedownload",
+        }
         for segment in path_segments
     ):
         path = re.sub(
-            r"/(?:download|downloadfile|downloadcoursedoc|filedownload)(?:/[^/?#]*)*",
+            r"/(?:download|downloadfile|downloadcoursedoc|downloadsectioncontentfile|filedownload)(?:/[^/?#]*)*",
             "/[download]",
             path,
             flags=re.I,
@@ -512,7 +592,7 @@ def safe_raw_url_for_debug(url: Any):
 
     text = strip_sensitive_query(text)
     text = re.sub(
-        r"(?i)/(?:download|downloadfile|downloadcoursedoc|filedownload)(?:/[^?#\s]*)*",
+        r"(?i)/(?:download|downloadfile|downloadcoursedoc|downloadsectioncontentfile|filedownload)(?:/[^?#\s]*)*",
         "/[download]",
         text,
     )
@@ -536,7 +616,7 @@ def is_probably_download_url(url: str):
     path_segments = [segment for segment in path.split("/") if segment]
 
     return any(
-        segment in {"download", "downloadfile", "getfile", "filedownload"}
+        segment in {"download", "downloadfile", "downloadsectioncontentfile", "getfile", "filedownload"}
         for segment in path_segments
     )
 
@@ -642,7 +722,7 @@ def sanitize_debug_value(key: str, value: Any):
 
     lowered_key = key.lower()
 
-    if lowered_key == "rawurl":
+    if lowered_key in {"raw", "rawurl"}:
         return safe_raw_url_for_debug(value)
 
     if lowered_key == "normalizedurl":
@@ -930,12 +1010,16 @@ async def login_with_pesuacademy_flow(username: str, password: str):
     return PESUAcademy(scraper)
 
 
-def fallback_response():
+class ElearningJsParsingNotImplemented(RuntimeError):
+    pass
+
+
+def fallback_response(warnings: list[str] | None = None):
     return {
         "ok": True,
         "source": "mock-fallback",
         "catalog": MOCK_FALLBACK_CATALOG,
-        "warnings": [FALLBACK_WARNING],
+        "warnings": warnings or [FALLBACK_WARNING],
     }
 
 
@@ -1210,6 +1294,9 @@ def collect_json_materials(
                 "fileName",
                 "filename",
                 "documentName",
+                "displayText",
+                "sectionName",
+                "contentHeading",
                 "resourceName",
                 "materialName",
                 "contentName",
@@ -1219,18 +1306,34 @@ def collect_json_materials(
     description = clean_text(
         find_first_value(
             data,
-            ["description", "desc", "remarks", "summary", "details"],
+            ["description", "desc", "remarks", "summary", "details", "sectionContentDescription", "objective"],
         )
     )
     raw_url = clean_text(
         find_first_value(
             data,
-            ["url", "href", "link", "fileUrl", "downloadUrl", "resourceUrl", "documentUrl"],
+            [
+                "url",
+                "href",
+                "link",
+                "fileUrl",
+                "downloadUrl",
+                "resourceUrl",
+                "documentUrl",
+                "sectionContentFilePath",
+                "sectionReferenceLink",
+                "sectionContentFileId",
+            ],
         )
     )
-    type_hint = clean_text(find_first_value(data, ["type", "fileType", "mimeType", "extension"]))
+    type_hint = clean_text(
+        find_first_value(
+            data,
+            ["type", "fileType", "mimeType", "extension", "contentType", "sectionContentSubType"],
+        )
+    )
     unit = clean_text(
-        find_first_value(data, ["unit", "module", "chapter", "unitName", "moduleName"])
+        find_first_value(data, ["unit", "module", "chapter", "unitName", "moduleName", "sectionName"])
         or context.get("unit")
         or ""
     )
@@ -1641,6 +1744,543 @@ def collect_html_materials(
         )
 
 
+def has_elearning_js_keyword(value: Any):
+    return bool(ELEARNING_JS_KEYWORD_RE.search(clean_text(value)))
+
+
+def decode_js_string_literal(value: Any):
+    text = str(value or "").replace("\\/", "/")
+
+    try:
+        return bytes(text, "utf-8").decode("unicode_escape")
+    except Exception:
+        return text
+
+
+def find_matching_delimiter(
+    text: str,
+    start_index: int,
+    open_char: str,
+    close_char: str,
+    max_chars: int = 8000,
+):
+    depth = 0
+    quote = ""
+    escaped = False
+    end_index = min(len(text), start_index + max_chars)
+
+    for index in range(start_index, end_index):
+        char = text[index]
+
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = ""
+
+            continue
+
+        if char in {"'", '"', "`"}:
+            quote = char
+        elif char == open_char:
+            depth += 1
+        elif char == close_char:
+            depth -= 1
+
+            if depth == 0:
+                return index + 1
+
+    return end_index
+
+
+def looks_like_elearning_endpoint_string(value: Any):
+    text = clean_text(value)
+
+    if not text or len(text) > 500:
+        return False
+
+    if any(marker in text for marker in ["<", ">", "\n", "\r"]):
+        return False
+
+    lowered = text.lower()
+
+    if lowered.startswith(("#", "data:", "javascript:", "mailto:", "tel:")):
+        return False
+
+    if lowered.endswith((".png", ".jpg", ".jpeg", ".gif", ".svg", ".css")):
+        return False
+
+    if lowered.startswith(
+        (
+            "http://",
+            "https://",
+            "www.",
+            "pesuacademy.com",
+            "/academy/",
+            "../",
+            "./",
+        )
+    ):
+        return True
+
+    if "/" in text:
+        return True
+
+    return bool(re.search(r"\.(?:html|json|jsp|do|action)(?:[?#]|$)", text, re.I))
+
+
+def normalize_elearning_js_url(raw_url: Any):
+    text = clean_text(unquote(unescape(str(raw_url or "")))).strip()
+
+    if not text:
+        return ""
+
+    if text == "instituteApp":
+        return normalize_pesu_url("/Academy/a/instituteApp")
+
+    if re.match(r"(?i)^[A-Za-z][\w-]*App$", text):
+        return normalize_pesu_url(f"/Academy/a/{text}")
+
+    if re.match(r"(?i)^i/[A-Za-z0-9_./-]+$", text):
+        return normalize_pesu_url(f"/Academy/a/{text}")
+
+    if "${" in text and "download" not in text.lower():
+        return ""
+
+    return normalize_pesu_url(text, PORTAL_HOME_URL)
+
+
+def parse_js_object_literal_fields(object_literal: str):
+    fields: dict[str, str] = {}
+
+    for match in ELEARNING_OBJECT_FIELD_RE.finditer(object_literal or ""):
+        key = match.group("key").strip().strip("'\"")
+        raw_value = match.group("value").strip()
+
+        if is_sensitive_query_key(key):
+            continue
+
+        if raw_value in {"elearningmenuId"}:
+            value = "200"
+        elif raw_value.lower() == "true":
+            value = "true"
+        elif raw_value.lower() == "false":
+            value = "false"
+        elif raw_value.lower() == "null":
+            value = ""
+        elif raw_value.startswith(("'", '"')) and raw_value.endswith(("'", '"')):
+            value = decode_js_string_literal(raw_value[1:-1])
+        else:
+            value = raw_value
+
+        clean_value = clean_text(value)
+
+        if clean_value and len(clean_value) <= 120:
+            fields[key] = clean_value
+
+    return fields
+
+
+def find_previous_js_object_literal(js: str, var_name: str, before_index: int):
+    if not var_name:
+        return ""
+
+    search_start = max(0, before_index - 2800)
+    prefix = js[search_start:before_index]
+    pattern = re.compile(rf"(?:var|let|const)?\s*{re.escape(var_name)}\s*=\s*\{{", re.I)
+    matches = list(pattern.finditer(prefix))
+
+    if not matches:
+        return ""
+
+    start = search_start + matches[-1].end() - 1
+    end = find_matching_delimiter(js, start, "{", "}", max_chars=3600)
+    literal = js[start:end]
+
+    if literal.startswith("{") and literal.endswith("}"):
+        return literal
+
+    return ""
+
+
+def iter_elearning_call_fragments(js: str):
+    for match in ELEARNING_AJAX_CALL_RE.finditer(js or ""):
+        start = match.end() - 1
+        end = find_matching_delimiter(js, start, "(", ")", max_chars=6500)
+        yield clean_text(match.group("kind")), js[match.start() : end]
+
+
+def collect_elearning_literal_candidates(js: str):
+    for match in ELEARNING_URL_ACTION_RE.finditer(js or ""):
+        value = decode_js_string_literal(match.group("value"))
+
+        if has_elearning_js_keyword(value) and looks_like_elearning_endpoint_string(value):
+            yield value, "url-action", "url-or-action"
+
+    for kind, fragment in iter_elearning_call_fragments(js):
+        fragment_has_keyword = has_elearning_js_keyword(fragment)
+
+        for match in ELEARNING_JS_STRING_RE.finditer(fragment):
+            value = decode_js_string_literal(match.group("value"))
+
+            if not looks_like_elearning_endpoint_string(value):
+                continue
+
+            if has_elearning_js_keyword(value) or fragment_has_keyword:
+                yield value, "ajax-call", kind
+
+    for match in ELEARNING_JS_STRING_RE.finditer(js or ""):
+        value = decode_js_string_literal(match.group("value"))
+
+        if has_elearning_js_keyword(value) and looks_like_elearning_endpoint_string(value):
+            yield value, "keyword-string", "string"
+
+
+def add_elearning_js_candidate(
+    candidates: dict[str, dict[str, Any]],
+    raw_url: Any,
+    *,
+    source: str,
+    kind: str,
+    method: str = "",
+    form_data: dict[str, str] | None = None,
+    ajax_like: bool = False,
+):
+    form_data = form_data or {}
+    normalized = normalize_elearning_js_url(raw_url)
+
+    if not normalized:
+        return
+
+    method = clean_text(method).upper()
+    candidate_key = json.dumps(
+        [
+            normalized,
+            method,
+            sorted(form_data.items()),
+            source,
+            kind,
+        ],
+        sort_keys=True,
+    )
+
+    if candidate_key in candidates:
+        return
+
+    candidate = {
+        "url": normalized,
+        "rawUrl": clean_text(raw_url),
+        "source": source,
+        "kind": kind,
+        "method": method,
+        "formData": form_data,
+        "ajaxLike": ajax_like or "/Academy/a/" in urlparse(normalized).path,
+        "index": len(candidates),
+    }
+    candidates[candidate_key] = candidate
+
+    debug(
+        "elearning-js-candidate",
+        raw=raw_url,
+        normalizedUrl=normalized,
+        source=source,
+        kind=kind,
+        method=method or "GET",
+        controllerMode=form_data.get("controllerMode", ""),
+        actionType=form_data.get("actionType", ""),
+        page=form_data.get("page", ""),
+    )
+
+
+def collect_elearning_do_ajax_candidates(js: str, candidates: dict[str, dict[str, Any]]):
+    for match in ELEARNING_DO_AJAX_CALL_RE.finditer(js or ""):
+        endpoint = decode_js_string_literal(match.group("endpoint"))
+        method = clean_text(match.group("method")).upper()
+        data_var = match.group("data_var")
+        object_literal = find_previous_js_object_literal(js, data_var, match.start())
+        form_data = parse_js_object_literal_fields(object_literal)
+        context = js[max(0, match.start() - 900) : min(len(js), match.end() + 900)]
+
+        if form_data.get("controllerMode") != "9935" and not has_elearning_js_keyword(context):
+            continue
+
+        add_elearning_js_candidate(
+            candidates,
+            endpoint,
+            source="doAjaxCall",
+            kind=f"action-{form_data.get('actionType', 'unknown')}",
+            method=method,
+            form_data=form_data,
+            ajax_like=True,
+        )
+
+
+def looks_like_json_response(text: str, content_type: str):
+    stripped = str(text or "").strip()
+
+    if not stripped:
+        return False
+
+    if "json" not in clean_text(content_type).lower() and stripped[:1] not in {"{", "["}:
+        return False
+
+    try:
+        json.loads(stripped)
+        return True
+    except Exception:
+        return False
+
+
+def collect_materials_from_probe_text(
+    text: str,
+    content_type: str,
+    subject_lookup: dict[str, str],
+    materials: list[dict[str, Any]],
+    seen: set[str],
+):
+    if not text:
+        return
+
+    if looks_like_json_response(text, content_type):
+        try:
+            collect_json_materials(json.loads(text), subject_lookup, materials, seen)
+            return
+        except Exception:
+            pass
+
+    if has_material_keyword(text) or EXTENSION_RE.search(text):
+        collect_html_materials(text, subject_lookup, materials, seen)
+
+
+def elearning_probe_sort_key(candidate: dict[str, Any]):
+    form_data = candidate.get("formData") or {}
+    action_type = clean_text(form_data.get("actionType", ""))
+    priority = ELEARNING_ACTION_PRIORITY.get(action_type, 100)
+
+    return (
+        priority,
+        0 if candidate.get("method") == "POST" else 1,
+        int(candidate.get("index") or 0),
+    )
+
+
+async def probe_elearning_endpoint(
+    session: Any,
+    *,
+    method: str,
+    url: str,
+    payload: dict[str, str] | None = None,
+    payload_kind: str = "empty",
+    subject_lookup: dict[str, str],
+    materials: list[dict[str, Any]],
+    seen: set[str],
+):
+    method = clean_text(method).upper() or "GET"
+    payload = payload or {}
+
+    if not url:
+        return
+
+    if is_probably_download_url(url):
+        debug(
+            "elearning-endpoint-probe",
+            method=method,
+            url=url,
+            payloadKind=payload_kind,
+            status="skipped-download-like-url",
+            statusCode=None,
+            contentType="",
+            responseLength=0,
+            looksLikeJson=False,
+            hasMaterialKeywords=False,
+        )
+        return
+
+    headers = {
+        "x-requested-with": "XMLHttpRequest",
+        "content-type": "application/x-www-form-urlencoded",
+        "referer": PORTAL_ADMIN_URL,
+    }
+
+    try:
+        if method == "POST":
+            response = await maybe_await(
+                session.post(
+                    url,
+                    data=payload,
+                    headers=headers,
+                )
+            )
+        else:
+            response = await maybe_await(
+                session.get(
+                    url,
+                    params=payload or None,
+                    headers=headers,
+                )
+            )
+
+        content_type = get_response_content_type(response)
+        response_length = get_response_content_length(response)
+        response_text = ""
+        looks_like_json = False
+        has_keywords = False
+
+        if is_text_like_content_type(content_type):
+            response_text = await response_to_text(response)
+            response_length = len(str(response_text or ""))
+            looks_like_json = looks_like_json_response(response_text, content_type)
+            has_keywords = has_material_keyword(response_text)
+            collect_materials_from_probe_text(
+                response_text,
+                content_type,
+                subject_lookup,
+                materials,
+                seen,
+            )
+
+        debug(
+            "elearning-endpoint-probe",
+            method=method,
+            url=url,
+            payloadKind=payload_kind,
+            statusCode=get_response_status(response),
+            contentType=content_type,
+            responseLength=response_length,
+            looksLikeJson=looks_like_json,
+            hasMaterialKeywords=has_keywords,
+        )
+    except Exception as error:
+        debug(
+            "elearning-endpoint-probe",
+            method=method,
+            url=url,
+            payloadKind=payload_kind,
+            status=type(error).__name__,
+            statusCode=None,
+            contentType="",
+            responseLength=0,
+            looksLikeJson=False,
+            hasMaterialKeywords=False,
+        )
+
+
+async def inspect_elearning_js(
+    session: Any,
+    subject_lookup: dict[str, str] | None = None,
+    materials: list[dict[str, Any]] | None = None,
+    seen: set[str] | None = None,
+):
+    subject_lookup = subject_lookup or {}
+    materials = materials if materials is not None else []
+    seen = seen if seen is not None else set()
+    starting_material_count = len(materials)
+    candidates: dict[str, dict[str, Any]] = {}
+
+    try:
+        response = await maybe_await(
+            session.get(
+                ELEARNING_JS_URL,
+                headers={
+                    "referer": PORTAL_ADMIN_URL,
+                },
+            )
+        )
+        content_type = get_response_content_type(response)
+        js = await response_to_text(response) if is_text_like_content_type(content_type) else ""
+        response_length = len(str(js or "")) if js else await get_response_debug_length(response)
+
+        debug(
+            "elearning-js-fetch",
+            statusCode=get_response_status(response),
+            responseLength=response_length,
+        )
+    except Exception as error:
+        debug(
+            "elearning-js-fetch",
+            status=type(error).__name__,
+            statusCode=None,
+            responseLength=0,
+        )
+        return {
+            "fetched": False,
+            "candidateCount": 0,
+            "materialCount": 0,
+        }
+
+    for raw_url, source, kind in collect_elearning_literal_candidates(js):
+        add_elearning_js_candidate(
+            candidates,
+            raw_url,
+            source=source,
+            kind=kind,
+            method="GET",
+            ajax_like=source in {"ajax-call", "url-action"},
+        )
+
+    collect_elearning_do_ajax_candidates(js, candidates)
+
+    unique_endpoint_candidates: dict[str, dict[str, Any]] = {}
+
+    for candidate in candidates.values():
+        unique_endpoint_candidates.setdefault(candidate["url"], candidate)
+
+    for candidate in unique_endpoint_candidates.values():
+        url = candidate.get("url", "")
+        ajax_like = bool(candidate.get("ajaxLike"))
+
+        await probe_elearning_endpoint(
+            session,
+            method="GET",
+            url=url,
+            payload_kind="empty",
+            subject_lookup=subject_lookup,
+            materials=materials,
+            seen=seen,
+        )
+
+        if ajax_like:
+            await probe_elearning_endpoint(
+                session,
+                method="POST",
+                url=url,
+                payload={},
+                payload_kind="empty",
+                subject_lookup=subject_lookup,
+                materials=materials,
+                seen=seen,
+            )
+
+    form_candidates = sorted(
+        [
+            candidate
+            for candidate in candidates.values()
+            if candidate.get("formData") and candidate.get("method")
+        ],
+        key=elearning_probe_sort_key,
+    )
+
+    for candidate in form_candidates[:ELEARNING_ENDPOINT_PROBE_LIMIT]:
+        await probe_elearning_endpoint(
+            session,
+            method=candidate.get("method", "GET"),
+            url=candidate.get("url", ""),
+            payload=candidate.get("formData") or {},
+            payload_kind="js-formdata",
+            subject_lookup=subject_lookup,
+            materials=materials,
+            seen=seen,
+        )
+
+    return {
+        "fetched": True,
+        "candidateCount": len(candidates),
+        "materialCount": len(materials) - starting_material_count,
+    }
+
+
 async def fetch_course_subject_lookup(pesu: Any):
     subjects = {}
     courses_result = await safe_call(lambda: pesu.get_courses())
@@ -1708,6 +2348,12 @@ async def fetch_portal_materials(
     headers = make_xhr_headers(pesu)
     timestamp = str(int(time.time() * 1000))
     menu_candidates = []
+    elearning_js_result = await inspect_elearning_js(
+        http_client,
+        subject_lookup,
+        materials,
+        seen,
+    )
     discovered_candidates = await discover_material_endpoints(http_client, PORTAL_HOME_URL)
     await probe_candidate_endpoints(http_client, discovered_candidates)
 
@@ -1819,6 +2465,13 @@ async def fetch_portal_materials(
                 status=type(error).__name__,
             )
 
+    return {
+        "elearningJsDiscovered": bool(
+            elearning_js_result.get("fetched") and elearning_js_result.get("candidateCount")
+        ),
+        "elearningMaterialCount": elearning_js_result.get("materialCount", 0),
+    }
+
 
 def build_catalog(materials: list[dict[str, Any]], subject_lookup: dict[str, str]):
     if not materials:
@@ -1880,7 +2533,10 @@ async def fetch_real_catalog(payload: dict[str, Any]):
         seen = set()
 
         await fetch_wrapper_method_materials(pesu, subject_lookup, materials, seen)
-        await fetch_portal_materials(pesu, subject_lookup, materials, seen)
+        portal_result = await fetch_portal_materials(pesu, subject_lookup, materials, seen)
+
+        if not materials and portal_result.get("elearningJsDiscovered"):
+            raise ElearningJsParsingNotImplemented()
 
         return build_catalog(materials, subject_lookup)
     finally:
@@ -1910,6 +2566,9 @@ async def handle_catalog_action(payload: dict[str, Any]):
             "catalog": catalog,
             "warnings": [],
         }
+    except ElearningJsParsingNotImplemented as error:
+        debug("materials-catalog-fallback", errorType=type(error).__name__)
+        return fallback_response([ELEARNING_JS_PARSE_WARNING])
     except Exception as error:
         debug("materials-catalog-fallback", errorType=type(error).__name__)
         return fallback_response()
