@@ -63,6 +63,7 @@ PESU_ORIGIN_URL = "https://www.pesuacademy.com"
 ACADEMY_BASE_URL = f"{PESU_ORIGIN_URL}/Academy"
 ACTION_BASE_URL = f"{ACADEMY_BASE_URL}/a/studentProfilePESU"
 ELEARNING_JS_URL = f"{ACADEMY_BASE_URL}/js/elearning.js"
+GROUP_BASED_CATEGORY_URL = f"{ACADEMY_BASE_URL}/a/i/groupBasedcategory"
 LOGIN_PAGE_PATH = "/"
 LOGIN_TIMEOUT_SECONDS = 30.0
 
@@ -323,6 +324,39 @@ ELEARNING_ACTION_PRIORITY = {
     "43": 7,
     "48": 8,
 }
+
+GROUP_BASED_CATEGORY_MATCH_KEYS = [
+    "course",
+    "subject",
+    "material",
+    "content",
+    "unit",
+    "topic",
+    "resource",
+    "module",
+    "file",
+    "download",
+    "section",
+    "category",
+]
+
+GROUP_BASED_CATEGORY_ID_KEYS = {
+    "id",
+    "categoryid",
+    "courseid",
+    "subjectid",
+}
+
+GROUP_BASED_CATEGORY_NAME_KEYS = [
+    "name",
+    "courseName",
+    "course_name",
+    "subjectName",
+    "subject_name",
+    "categoryName",
+    "category_name",
+    "title",
+]
 
 MOCK_FALLBACK_CATALOG = {
     "subjects": [
@@ -604,6 +638,7 @@ def safe_raw_url_for_debug(url: Any):
     text = re.sub(r"[A-Za-z0-9+/=_\-.]{48,}", "[redacted-token]", text)
 
     return text[:260]
+
 
 
 def is_probably_download_url(url: str):
@@ -2066,6 +2101,164 @@ def elearning_probe_sort_key(candidate: dict[str, Any]):
     )
 
 
+def group_based_category_key_matches(key: Any):
+    lowered = clean_text(key).lower()
+    return any(marker in lowered for marker in GROUP_BASED_CATEGORY_MATCH_KEYS)
+
+
+def group_based_category_id_key_matches(key: Any):
+    return clean_text(key).replace("_", "").lower() in GROUP_BASED_CATEGORY_ID_KEYS
+
+
+def find_group_based_category_name(item: dict[str, Any]):
+    for key in GROUP_BASED_CATEGORY_NAME_KEYS:
+        value = find_first_value(item, [key])
+
+        if value is not None:
+            return safe_optional_text(value, 140)
+
+    for key, value in item.items():
+        if "name" in clean_text(key).lower():
+            return safe_optional_text(value, 140)
+
+    return ""
+
+
+def iter_group_based_category_matches(value: Any, path: str = "root"):
+    data = serialize(value)
+
+    if isinstance(data, dict):
+        for key, item in data.items():
+            key_text = clean_text(key)
+            next_path = f"{path}.{key_text}" if path else key_text
+
+            if group_based_category_key_matches(key_text):
+                yield {
+                    "path": next_path,
+                    "key": key_text,
+                    "valueType": type(item).__name__,
+                }
+
+            yield from iter_group_based_category_matches(item, next_path)
+    elif isinstance(data, list):
+        for index, item in enumerate(data):
+            yield from iter_group_based_category_matches(item, f"{path}[{index}]")
+
+
+def iter_group_based_category_ids(value: Any, path: str = "root"):
+    data = serialize(value)
+
+    if isinstance(data, dict):
+        name = find_group_based_category_name(data)
+
+        for key, item in data.items():
+            if group_based_category_id_key_matches(key) and item is not None:
+                id_value = safe_optional_text(item, 120)
+
+                if id_value:
+                    yield {
+                        "id": id_value,
+                        "name": name,
+                    }
+
+            yield from iter_group_based_category_ids(item, f"{path}.{clean_text(key)}")
+    elif isinstance(data, list):
+        for index, item in enumerate(data):
+            yield from iter_group_based_category_ids(item, f"{path}[{index}]")
+
+
+async def inspect_group_based_category(session: Any):
+    debug_log = debug
+    try:
+        response = await maybe_await(
+            session.get(
+                GROUP_BASED_CATEGORY_URL,
+                headers={
+                    "x-requested-with": "XMLHttpRequest",
+                    "referer": PORTAL_ADMIN_URL,
+                },
+            )
+        )
+
+        import json
+
+        raw_text = response.text
+
+        debug_log(
+            "groupBasedcategory-raw",
+            preview=raw_text[:500],
+        )
+
+        try:
+            data = json.loads(raw_text)
+        except Exception:
+            data = raw_text
+
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except Exception:
+                pass
+
+        debug_log(
+            "groupBasedcategory-summary",
+            topLevelType=type(data).__name__,
+            itemCount=len(data) if hasattr(data, "__len__") else None,
+        )
+
+        if isinstance(data, list):
+            for item in data[:5]:
+                debug_log(
+                    "groupBasedcategory-item",
+                    data=str(item)[:500],
+                )
+
+        seen_matches = set()
+
+        for match in iter_group_based_category_matches(data):
+            key = (match["path"], match["key"], match["valueType"])
+
+            if key in seen_matches:
+                continue
+
+            seen_matches.add(key)
+            debug(
+                "groupBasedcategory-match",
+                path=match["path"],
+                key=match["key"],
+                valueType=match["valueType"],
+            )
+
+        seen_ids = set()
+
+        for candidate in iter_group_based_category_ids(data):
+            key = (candidate["id"], candidate["name"])
+
+            if key in seen_ids:
+                continue
+
+            seen_ids.add(key)
+            debug(
+                "groupBasedcategory-id",
+                id=candidate["id"],
+                name=candidate["name"],
+            )
+
+        return data
+    except Exception as exc:
+        import traceback
+        debug_log(
+            "groupBasedcategory-error",
+            errorType=type(exc).__name__,
+            error=str(exc),
+        )
+        debug_log(
+            "groupBasedcategory-traceback",
+            traceback=traceback.format_exc()[:2000],
+        )
+        raise
+
+
 async def probe_elearning_endpoint(
     session: Any,
     *,
@@ -2502,6 +2695,7 @@ def build_catalog(materials: list[dict[str, Any]], subject_lookup: dict[str, str
     }
 
 
+
 async def fetch_real_catalog(payload: dict[str, Any]):
     username = payload.get("username")
     password = payload.get("password")
@@ -2527,6 +2721,7 @@ async def fetch_real_catalog(payload: dict[str, Any]):
             "materials-login-success",
             currentUrl=safe_url_for_debug(find_current_url(pesu, http_client)) or "unavailable",
         )
+        await inspect_group_based_category(http_client)
 
         subject_lookup = await fetch_course_subject_lookup(pesu)
         materials = []
